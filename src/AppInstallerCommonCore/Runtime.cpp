@@ -5,6 +5,8 @@
 #include "Public/AppInstallerRuntime.h"
 #include "Public/AppInstallerStrings.h"
 
+#include <optional>
+
 #define WINGET_DEFAULT_LOG_DIRECTORY "DiagOutputDir"
 
 namespace AppInstaller::Runtime
@@ -279,6 +281,10 @@ namespace AppInstaller::Runtime
                 result /= GetPackageName();
                 create = false;
                 break;
+            case PathName::UserProfile:
+                result = GetKnownFolderPath(FOLDERID_Profile);
+                create = false;
+                break;
             default:
                 THROW_HR(E_UNEXPECTED);
             }
@@ -315,6 +321,10 @@ namespace AppInstaller::Runtime
                 result /= GetUserSID();
                 result /= s_SecureSettings_UserRelative;
                 result /= s_SecureSettings_Relative_Unpackaged;
+                create = false;
+                break;
+            case PathName::UserProfile:
+                result = GetKnownFolderPath(FOLDERID_Profile);
                 create = false;
                 break;
             default:

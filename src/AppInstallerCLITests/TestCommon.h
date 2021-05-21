@@ -3,6 +3,7 @@
 #pragma once
 #include <AppInstallerLogging.h>
 #include <AppInstallerProgress.h>
+#include <winget/UserSettings.h>
 #include <wil/result.h>
 
 #include <filesystem>
@@ -92,12 +93,18 @@ namespace TestCommon
     struct TestProgress : public AppInstaller::IProgressCallback
     {
         // Inherited via IProgressCallback
+        void BeginProgress() override;
+        
         void OnProgress(uint64_t current, uint64_t maximum, AppInstaller::ProgressType type) override;
+        
+        void EndProgress(bool) override;
+
         bool IsCancelled() override;
         CancelFunctionRemoval SetCancellationFunction(std::function<void()>&& f) override;
 
         std::function<void(uint64_t, uint64_t, AppInstaller::ProgressType)> m_OnProgress;
     };
+
     // Creates a volatile key for testing.
     wil::unique_hkey RegCreateVolatileTestRoot();
 
@@ -106,7 +113,21 @@ namespace TestCommon
 
     // Set registry values.
     void SetRegistryValue(HKEY key, const std::wstring& name, const std::wstring& value, DWORD type = REG_SZ);
-    void SetRegistryValue(HKEY key, const std::wstring& name, const std::vector<BYTE>& value);
+    void SetRegistryValue(HKEY key, const std::wstring& name, const std::vector<BYTE>& value, DWORD type = REG_BINARY);
     void SetRegistryValue(HKEY key, const std::wstring& name, DWORD value);
 
+    // Override UserSettings using this class.
+    // Automatically overrides the user settings for the lifetime of this object.
+    // DOES NOT SUPPORT NESTED USE
+    struct TestUserSettings : public AppInstaller::Settings::UserSettings
+    {
+        TestUserSettings(bool keepFileSettings = false);
+        ~TestUserSettings();
+
+        template <AppInstaller::Settings::Setting S>
+        void Set(typename AppInstaller::Settings::details::SettingMapping<S>::value_t&& value)
+        {
+            m_settings[S].emplace<AppInstaller::Settings::details::SettingIndex(S)>(std::move(value));
+        }
+    };
 }
