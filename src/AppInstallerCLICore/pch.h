@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <WinInet.h>
+#include <msi.h>
 
 #pragma warning( push )
 #pragma warning ( disable : 4458 4100 6031 4702 )
@@ -49,13 +50,10 @@
 
 #include <AppInstallerArchitecture.h>
 #include <AppInstallerDateTime.h>
-#include <AppInstallerDeployment.h>
 #include <AppInstallerDownloader.h>
 #include <AppInstallerErrors.h>
 #include <AppInstallerLogging.h>
-#include <AppInstallerMsixInfo.h>
-#include <AppInstallerRepositorySearch.h>
-#include <AppInstallerRepositorySource.h>
+#include <winget/RepositorySource.h>
 #include <AppInstallerRuntime.h>
 #include <AppInstallerSHA256.h>
 #include <AppInstallerStrings.h>

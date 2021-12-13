@@ -25,6 +25,7 @@ namespace AppInstaller::Runtime
 #ifndef WINGET_DISABLE_FOR_FUZZING
         constexpr std::string_view s_SecureSettings_Relative_Packaged = "pkg"sv;
 #endif
+        constexpr std::string_view s_PreviewBuildSuffix = "-preview"sv;
 
         // Gets a boolean indicating whether the current process has identity.
         bool DoesCurrentProcessHaveIdentity()
@@ -169,6 +170,11 @@ namespace AppInstaller::Runtime
             strstr << VERSION_BUILD;
         }
 
+        if (!IsReleaseBuild())
+        {
+            strstr << s_PreviewBuildSuffix;
+        }
+
         return LocIndString{ strstr.str() };
     }
 
@@ -219,6 +225,12 @@ namespace AppInstaller::Runtime
         strstr << Utility::ConvertToUTF8(versionInfo.DeviceFamily()) << " v" << parts[3] << '.' << parts[2] << '.' << parts[1] << '.' << parts[0];
 
         return LocIndString{ strstr.str() };
+    }
+
+    std::string GetOSRegion()
+    {
+        winrt::Windows::Globalization::GeographicRegion region;
+        return Utility::ConvertToUTF8(region.CodeTwoLetter());
     }
 #endif
 
@@ -403,6 +415,9 @@ namespace AppInstaller::Runtime
         return wil::test_token_membership(nullptr, SECURITY_NT_AUTHORITY, SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS);
     }
 
+    // TODO: Replace this function with proper checks for supported functionality rather
+    //       than simply relying on "is it NTFS?", even if those functions delegate to
+    //       this one for the answer.
     bool IsNTFS(const std::filesystem::path& filePath)
     {
         wil::unique_hfile fileHandle{ CreateFileW(
@@ -428,6 +443,20 @@ namespace AppInstaller::Runtime
             MAX_PATH /*nFileSystemNameSize*/));
 
         return _wcsicmp(fileSystemName, L"NTFS") == 0;
+    }
+
+    bool SupportsHardLinks(const std::filesystem::path& path)
+    {
+        return IsNTFS(path);
+    }
+
+    constexpr bool IsReleaseBuild()
+    {
+#ifdef WINGET_ENABLE_RELEASE_BUILD
+        return true;
+#else
+        return false;
+#endif
     }
 
 #ifndef AICLI_DISABLE_TEST_HOOKS

@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include <mutex>
-#include <AppInstallerRepositorySource.h>
+#include <winget/RepositorySource.h>
 #include "PackageVersionInfo.h"
 #include "PackageVersionInfo.g.cpp"
 #include "PackageCatalogInfo.h"
 #include "PackageCatalog.h"
 #include "CatalogPackage.h"
 #include "Workflows/WorkflowBase.h"
+#include "AppInstallerVersions.h"
 #include "Converters.h"
 #include <wil\cppwinrt_wrl.h>
 
@@ -80,11 +81,39 @@ namespace winrt::Microsoft::Management::Deployment::implementation
         if (!m_packageCatalog)
         {
             auto packageCatalogInfo = winrt::make_self<wil::details::module_count_wrapper<winrt::Microsoft::Management::Deployment::implementation::PackageCatalogInfo>>();
-            packageCatalogInfo->Initialize(m_packageVersion->GetSource()->GetDetails());
+            packageCatalogInfo->Initialize(m_packageVersion->GetSource().GetDetails());
             auto packageCatalog = winrt::make_self<wil::details::module_count_wrapper<winrt::Microsoft::Management::Deployment::implementation::PackageCatalog>>();
             packageCatalog->Initialize(*packageCatalogInfo, m_packageVersion->GetSource(), false);
             m_packageCatalog = *packageCatalog;
         }
         return m_packageCatalog;
+    }
+
+    winrt::Microsoft::Management::Deployment::CompareResult PackageVersionInfo::CompareToVersion(hstring versionString)
+    {
+        if (versionString.empty())
+        {
+            return CompareResult::Unknown;
+        }
+
+        AppInstaller::Utility::Version thisVersion{ m_packageVersion->GetProperty(::AppInstaller::Repository::PackageVersionProperty::Version).get() };
+        AppInstaller::Utility::Version otherVersion{ AppInstaller::Utility::ConvertToUTF8(versionString) };
+
+        if (thisVersion < otherVersion)
+        {
+            return CompareResult::Lesser;
+        }
+        else if (otherVersion < thisVersion)
+        {
+            return CompareResult::Greater;
+        }
+        else
+        {
+            return CompareResult::Equal;
+        }
+    }
+    std::shared_ptr<::AppInstaller::Repository::IPackageVersion> PackageVersionInfo::GetRepositoryPackageVersion()
+    { 
+        return m_packageVersion; 
     }
 }

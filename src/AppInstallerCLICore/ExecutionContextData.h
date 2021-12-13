@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 #pragma once
-#include <AppInstallerRepositorySearch.h>
-#include <AppInstallerRepositorySource.h>
+#include <winget/RepositorySource.h>
 #include <winget/Manifest.h>
 #include "CompletionData.h"
 #include "PackageCollection.h"
@@ -34,6 +33,7 @@ namespace AppInstaller::CLI::Execution
         InstallerPath,
         LogPath,
         InstallerArgs,
+        InstallerReturnCode,
         CompletionData,
         InstalledPackageVersion,
         UninstallString,
@@ -42,19 +42,18 @@ namespace AppInstaller::CLI::Execution
         // On export: A collection of packages to be exported to a file
         // On import: A collection of packages read from a file
         PackageCollection,
-        // On import: A collection of specific package versions to install
+        // On import and upgrade all: A collection of specific package versions to install
         PackagesToInstall,
         // On import: Sources for the imported packages
         Sources,
         ARPSnapshot,
+        Dependencies,
+        DependencySource,
+        AllowedArchitectures,
         Max
     };
 
-    struct PackageToInstall
-    {
-        std::shared_ptr<Repository::IPackageVersion> PackageVersion;
-        PackageCollection::Package PackageRequest;
-    };
+    struct Context;
 
     namespace details
     {
@@ -67,7 +66,7 @@ namespace AppInstaller::CLI::Execution
         template <>
         struct DataMapping<Data::Source>
         {
-            using value_t = std::shared_ptr<Repository::ISource>;
+            using value_t = Repository::Source;
         };
 
         template <>
@@ -131,6 +130,12 @@ namespace AppInstaller::CLI::Execution
         };
 
         template <>
+        struct DataMapping<Data::InstallerReturnCode>
+        {
+            using value_t = DWORD;
+        };
+
+        template <>
         struct DataMapping<Data::CompletionData>
         {
             using value_t = CLI::CompletionData;
@@ -169,13 +174,13 @@ namespace AppInstaller::CLI::Execution
         template <>
         struct DataMapping<Data::PackagesToInstall>
         {
-            using value_t = std::vector<PackageToInstall>;
+            using value_t = std::vector<std::unique_ptr<Context>>;
         };
 
         template <>
         struct DataMapping<Data::Sources>
         {
-            using value_t = std::vector<std::shared_ptr<Repository::ISource>>;
+            using value_t = std::vector<Repository::Source>;
         };
 
         template <>
@@ -183,6 +188,24 @@ namespace AppInstaller::CLI::Execution
         {
             // Contains the { Id, Version, Channel }
             using value_t = std::vector<std::tuple<Utility::LocIndString, Utility::LocIndString, Utility::LocIndString>>;
+        };
+
+        template <>
+        struct DataMapping<Data::Dependencies>
+        {
+            using value_t = Manifest::DependencyList;
+        };
+
+        template <>
+        struct DataMapping<Data::DependencySource>
+        {
+            using value_t = Repository::Source;
+        };
+        
+        template <>
+        struct DataMapping<Data::AllowedArchitectures>
+        {
+            using value_t = std::vector<Utility::Architecture>;
         };
     }
 }

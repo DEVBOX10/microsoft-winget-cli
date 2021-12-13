@@ -31,7 +31,6 @@ namespace AppInstaller::CLI
 
     std::string CompleteCommand::HelpLink() const
     {
-        // TODO: Define me and point to the right location
         return "https://aka.ms/winget-command-complete";
     }
 
@@ -54,8 +53,10 @@ namespace AppInstaller::CLI
             }
 
             // Create a new Context to execute the Complete from
-            auto subContextPtr = context.Clone();
+            auto subContextPtr = context.CreateSubContext();
             Context& subContext = *subContextPtr;
+            auto previousThreadGlobals = subContext.SetForCurrentThread();
+
             subContext.Reporter.SetChannel(Execution::Reporter::Channel::Completion);
             subContext.Add<Data::CompletionData>(std::move(data));
 

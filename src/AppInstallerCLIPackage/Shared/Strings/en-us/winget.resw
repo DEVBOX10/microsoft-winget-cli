@@ -141,6 +141,9 @@
     <value>The following sub-commands are available:</value>
     <comment>Nested commands that can be run in context of the selected command</comment>
   </data>
+  <data name="AvailableUpgrades" xml:space="preserve">
+    <value>upgrades available.</value>
+  </data>
   <data name="ChannelArgumentDescription" xml:space="preserve">
     <value>Use the specified channel; default is general audience</value>
   </data>
@@ -164,7 +167,7 @@
     <value>Enables context sensitive command line completion</value>
   </data>
   <data name="CountArgumentDescription" xml:space="preserve">
-    <value>Show no more than specified number of results</value>
+    <value>Show no more than specified number of results (between 1 and 1000)</value>
   </data>
   <data name="Done" xml:space="preserve">
     <value>Done</value>
@@ -463,10 +466,10 @@ They can be configured through the settings file 'winget settings'.</value>
     <value>The following failures were found validating the settings:</value>
   </data>
   <data name="SettingsCommandLongDescription" xml:space="preserve">
-    <value>Open settings in the default json text editor. If no editor is configured, opens settings in notepad. For available settings see https://aka.ms/winget-settings</value>
+    <value>Open settings in the default json text editor. If no editor is configured, opens settings in notepad. For available settings see https://aka.ms/winget-settings This command can also be used to set administrator settings by providing 'enable' or 'disable' argument</value>
   </data>
   <data name="SettingsCommandShortDescription" xml:space="preserve">
-    <value>Open settings</value>
+    <value>Open settings or set administrator settings</value>
   </data>
   <data name="SettingsWarnings" xml:space="preserve">
     <value>Unexpected error while loading settings. Please verify your settings by running the settings command.</value>
@@ -541,6 +544,10 @@ They can be configured through the settings file 'winget settings'.</value>
     <value>Name</value>
     <comment>The name of the source.</comment>
   </data>
+  <data name="SourceListIdentifier" xml:space="preserve">
+    <value>Identifier</value>
+    <comment>The source's unique identifier.</comment>
+  </data>
   <data name="SourceListNoneFound" xml:space="preserve">
     <value>Did not find a source named:</value>
   </data>
@@ -567,7 +574,7 @@ They can be configured through the settings file 'winget settings'.</value>
     <value>Name of the source</value>
   </data>
   <data name="SourceOpenFailedSuggestion" xml:space="preserve">
-    <value>Failed to open the source; try the 'source reset' command if the problem persists.</value>
+    <value>Failed when opening source(s); try the 'source reset' command if the problem persists.</value>
     <comment>{Locked="source reset"}</comment>
   </data>
   <data name="SourceOpenPredefinedFailedSuggestion" xml:space="preserve">
@@ -920,5 +927,342 @@ Configuration is disabled due to Group Policy.</value>
   </data>
   <data name="Cancelled" xml:space="preserve">
     <value>Cancelled</value>
+  </data>
+  <data name="ExternalDependencies" xml:space="preserve">
+    <value>External</value>
+  </data>
+  <data name="ImportCommandReportDependencies" xml:space="preserve">
+    <value>The packages found in this import have the following dependencies:</value>
+    <comment>Import command sentence showed before reporting dependencies</comment>
+  </data>
+  <data name="InstallAndUpgradeCommandsReportDependencies" xml:space="preserve">
+    <value>This package requires the following dependencies:</value>
+    <comment>Install and Upgrade commands sentence showed before reporting dependencies</comment>
+  </data>
+  <data name="DependenciesFlowInstall" xml:space="preserve">
+    <value>Installing dependencies:</value>
+  </data>
+  <data name="DependenciesFlowSourceNotFound" xml:space="preserve">
+    <value>Dependency source not found</value>
+  </data>
+  <data name="DependenciesFlowSourceTooManyMatches" xml:space="preserve">
+    <value>Package search yield more than one result.</value>
+    <comment>When node package id search yield too many matches</comment>
+  </data>
+  <data name="DependenciesFlowPackageVersionNotFound" xml:space="preserve">
+    <value>Latest version not found for package</value>
+    <comment>When no suitable version found for the specific package.</comment>
+  </data>
+  <data name="DependenciesFlowNoInstallerFound" xml:space="preserve">
+    <value>No installers found</value>
+  </data>
+  <data name="DependenciesFlowNoMinVersion" xml:space="preserve">
+    <value>Minimum required version not available for package</value>
+  </data>
+  <data name="DependenciesFlowNoMatches" xml:space="preserve">
+    <value>No matches</value>
+    <comment>When package search yields no matches</comment>
+  </data>
+  <data name="DependenciesFlowContainsLoop" xml:space="preserve">
+    <value>Has loop</value>
+    <comment>Dependency graph has loop</comment>
+  </data>
+  <data name="DependenciesFlowNoSuitableInstallerFound" xml:space="preserve">
+    <value>No suitable installer found for manifest</value>
+    <comment>Attempt to get preferred installer for manifest failed.</comment>
+  </data>
+  <data name="DependenciesManagementError" xml:space="preserve">
+    <value>Error processing package dependencies, do you wish to continue installation?</value>
+    <comment>Prompt message shown when dependencies processing yields errors.</comment>
+  </data>
+  <data name="DependenciesManagementExitMessage" xml:space="preserve">
+    <value>Error processing package dependencies, exiting...</value>
+  </data>
+  <data name="PackageDependencies" xml:space="preserve">
+    <value>Packages</value>
+  </data>
+  <data name="UninstallCommandReportDependencies" xml:space="preserve">
+    <value>This package had dependencies that may not be needed anymore:</value>
+    <comment>Uninstall command sentence showed before reporting dependencies</comment>
+  </data>
+  <data name="ValidateCommandReportDependencies" xml:space="preserve">
+    <value>Manifest has the following dependencies that were not validated; ensure that they are valid:</value>
+    <comment>Validate command sentence showed before reporting dependencies</comment>
+  </data>
+  <data name="WindowsFeaturesDependencies" xml:space="preserve">
+    <value>Windows Features</value>
+  </data>
+  <data name="WindowsLibrariesDependencies" xml:space="preserve">
+    <value>Windows Libraries</value>
+  </data>
+  <data name="DependencySourceArgumentDescription" xml:space="preserve">
+    <value>Find package dependencies using the specified source</value>
+    <comment>For getting package type dependencies when installing from a local manifest</comment>
+  </data>
+  <data name="WindowsStoreTerms" xml:space="preserve">
+    <value>Windows Store Terms</value>
+  </data>
+  <data name="AcceptPackageAgreementsArgumentDescription" xml:space="preserve">
+    <value>Accept all license agreements for packages</value>
+  </data>
+  <data name="ExportedPackageRequiresLicenseAgreement" xml:space="preserve">
+    <value>Exported package requires license agreement to install:</value>
+  </data>
+  <data name="PackageAgreementsPrompt" xml:space="preserve">
+    <value>The publisher requires that you view the above information and accept the agreements before installing.
+Do you agree to the terms?</value>
+  </data>
+  <data name="PackageAgreementsNotAgreedTo" xml:space="preserve">
+    <value>Package agreements were not agreed to. Operation cancelled.</value>
+  </data>
+  <data name="ShowLabelAgreements" xml:space="preserve">
+    <value>Agreements:</value>
+  </data>
+  <data name="ShowLabelAuthor" xml:space="preserve">
+    <value>Author:</value>
+  </data>
+  <data name="ShowLabelDescription" xml:space="preserve">
+    <value>Description:</value>
+  </data>
+  <data name="ShowLabelInstaller" xml:space="preserve">
+    <value>Installer:</value>
+  </data>
+  <data name="ShowLabelInstallerLocale" xml:space="preserve">
+    <value>Locale:</value>
+  </data>
+  <data name="ShowLabelInstallerProductId" xml:space="preserve">
+    <value>Store Product Id:</value>
+  </data>
+  <data name="ShowLabelInstallerSha256" xml:space="preserve">
+    <value>SHA256:</value>
+  </data>
+  <data name="ShowLabelInstallerType" xml:space="preserve">
+    <value>Type:</value>
+  </data>
+  <data name="ShowLabelInstallerUrl" xml:space="preserve">
+    <value>Download Url:</value>
+  </data>
+  <data name="ShowLabelLicense" xml:space="preserve">
+    <value>License:</value>
+  </data>
+  <data name="ShowLabelLicenseUrl" xml:space="preserve">
+    <value>License Url:</value>
+  </data>
+  <data name="ShowLabelMoniker" xml:space="preserve">
+    <value>Moniker:</value>
+  </data>
+  <data name="ShowLabelPackageUrl" xml:space="preserve">
+    <value>Homepage:</value>
+  </data>
+  <data name="ShowLabelPublisher" xml:space="preserve">
+    <value>Publisher:</value>
+  </data>
+  <data name="ShowLabelVersion" xml:space="preserve">
+    <value>Version:</value>
+  </data>
+  <data name="ShowLabelDependencies" xml:space="preserve">
+    <value>Dependencies:</value>
+  </data>
+  <data name="ShowLabelWindowsFeaturesDependencies" xml:space="preserve">
+    <value>Windows Features:</value>
+  </data>
+  <data name="ShowLabelWindowsLibrariesDependencies" xml:space="preserve">
+    <value>Windows Libraries:</value>
+  </data>
+  <data name="ShowLabelPackageDependencies" xml:space="preserve">
+    <value>Package Dependencies:</value>
+  </data>
+  <data name="ShowLabelExternalDependencies" xml:space="preserve">
+    <value>External Dependencies:</value>
+  </data>
+  <data name="PromptOptionNo" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="PromptOptionYes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="SourceAddOpenSourceFailed" xml:space="preserve">
+    <value>Failed to open the added source.</value>
+  </data>
+  <data name="AcceptSourceAgreementsArgumentDescription" xml:space="preserve">
+    <value>Accept all source agreements during source operations</value>
+  </data>
+  <data name="SourceAgreementsTitle" xml:space="preserve">
+    <value>The `%1` source requires that you view the following agreements before using.</value>
+    <comment>{Locked="%1"} The value will be replaced with the source name</comment>
+  </data>
+  <data name="SourceAgreementsPrompt" xml:space="preserve">
+    <value>Do you agree to all the source agreements terms?</value>
+  </data>
+  <data name="SourceAgreementsNotAgreedTo" xml:space="preserve">
+    <value>One or more of the source agreements were not agreed to. Operation cancelled. Please accept the source agreements or remove the corresponding sources.</value>
+  </data>
+  <data name="SourceAgreementsMarketMessage" xml:space="preserve">
+    <value>The source requires the current machine's 2-letter geographic region to be sent to the backend service to function properly (ex. "US").</value>
+  </data>
+  <data name="InstallFlowRegistrationDeferred" xml:space="preserve">
+    <value>Successfully installed. Restart the application to complete the upgrade.</value>
+  </data>
+  <data name="HeaderArgumentDescription" xml:space="preserve">
+    <value>Optional Windows-Package-Manager REST source HTTP header</value>
+  </data>
+  <data name="HeaderArgumentNotApplicableForNonRestSourceWarning" xml:space="preserve">
+    <value>Ignoring the optional header as it is not applicable for this source.</value>
+  </data>
+  <data name="HeaderArgumentNotApplicableWithoutSource" xml:space="preserve">
+    <value>The optional header is not applicable without specifying a source</value>
+  </data>
+  <data name="ShowLabelInstallerReleaseDate" xml:space="preserve">
+    <value>Release Date:</value>
+  </data>
+  <data name="ShowLabelPublisherUrl" xml:space="preserve">
+    <value>Publisher Url:</value>
+  </data>
+  <data name="ShowLabelPublisherSupportUrl" xml:space="preserve">
+    <value>Publisher Support Url:</value>
+  </data>
+  <data name="ShowLabelPrivacyUrl" xml:space="preserve">
+    <value>Privacy Url:</value>
+  </data>
+  <data name="ShowLabelCopyright" xml:space="preserve">
+    <value>Copyright:</value>
+  </data>
+  <data name="ShowLabelCopyrightUrl" xml:space="preserve">
+    <value>Copyright Url:</value>
+  </data>
+  <data name="ShowLabelReleaseNotes" xml:space="preserve">
+    <value>Release Notes:</value>
+  </data>
+  <data name="ShowLabelReleaseNotesUrl" xml:space="preserve">
+    <value>Release Notes Url:</value>
+  </data>
+  <data name="SearchFailureWarning" xml:space="preserve">
+    <value>Failed when searching source; results will not be included:</value>
+  </data>
+  <data name="SearchFailureError" xml:space="preserve">
+    <value>Failed when searching source:</value>
+  </data>
+  <data name="FeatureDisabledByAdminSettingMessage" xml:space="preserve">
+    <value>This feature needs to be enabled by administrators. To enable it, run 'winget settings --enable %1' as administrator.</value>
+    <comment>{Locked="winget settings --enable %1"} The value will be replaced with the admin setting</comment>
+  </data>
+  <data name="AdminSettingEnableDescription" xml:space="preserve">
+    <value>Enables the specific administrator setting</value>
+  </data>
+  <data name="AdminSettingDisableDescription" xml:space="preserve">
+    <value>Disables the specific administrator setting</value>
+  </data>
+  <data name="TooManyAdminSettingArgumentsError" xml:space="preserve">
+    <value>Too many admin setting arguments provided</value>
+  </data>
+  <data name="AdminSettingEnabled" xml:space="preserve">
+    <value>Admin setting enabled.</value>
+  </data>
+  <data name="AdminSettingDisabled" xml:space="preserve">
+    <value>Admin setting disabled.</value>
+  </data>
+  <data name="InstallFlowReturnCodePackageInUse" xml:space="preserve">
+    <value>Application is currently running. Exit the application then try again.</value>
+  </data>
+  <data name="InstallFlowReturnCodeInstallInProgress" xml:space="preserve">
+    <value>Another installation is already in progress. Try again later.</value>
+  </data>
+  <data name="InstallFlowReturnCodeFileInUse" xml:space="preserve">
+    <value>One or more files are being used. Exit the application then try again.</value>
+  </data>
+  <data name="InstallFlowReturnCodeMissingDependency" xml:space="preserve">
+    <value>This package has a dependency missing from your system.</value>
+  </data>
+  <data name="InstallFlowReturnCodeDiskFull" xml:space="preserve">
+    <value>There's no more space on your PC. Make space, then try again.</value>
+  </data>
+  <data name="InstallFlowReturnCodeInsufficientMemory" xml:space="preserve">
+    <value>There's not enough memory available to install. Close other applications then try again.</value>
+  </data>
+  <data name="InstallFlowReturnCodeNoNetwork" xml:space="preserve">
+    <value>This application requires internet connectivity. Connect to a network then try again.</value>
+  </data>
+  <data name="InstallFlowReturnCodeContactSupport" xml:space="preserve">
+    <value>This application encountered an error during installation. Contact support.</value>
+  </data>
+  <data name="InstallFlowReturnCodeRebootRequiredToFinish" xml:space="preserve">
+    <value>Restart your PC to finish installation.</value>
+  </data>
+  <data name="InstallFlowReturnCodeRebootRequiredForInstall" xml:space="preserve">
+    <value>Your PC will restart to finish installation.</value>
+  </data>
+  <data name="InstallFlowReturnCodeRebootInitiated" xml:space="preserve">
+    <value>Installation failed. Restart your PC then try again.</value>
+  </data>
+  <data name="InstallFlowReturnCodeCancelledByUser" xml:space="preserve">
+    <value>You cancelled the installation.</value>
+  </data>
+  <data name="InstallFlowReturnCodeAlreadyInstalled" xml:space="preserve">
+    <value>Another version of this application is already installed.</value>
+  </data>
+  <data name="InstallFlowReturnCodeDowngrade" xml:space="preserve">
+    <value>A higher version of this application is already installed.</value>
+  </data>
+  <data name="InstallFlowReturnCodeBlockedByPolicy" xml:space="preserve">
+    <value>Organization policies are preventing installation. Contact your admin.</value>
+  </data>
+  <data name="InstallAbandoned" xml:space="preserve">
+    <value>Installation abandoned</value>
+  </data>
+  <data name="InstallerFailedWithCode" xml:space="preserve">
+    <value>Installer failed with exit code:</value>
+  </data>
+  <data name="InstallerLogAvailable" xml:space="preserve">
+    <value>Installer log is available at:</value>
+  </data>
+  <data name="SearchFailureErrorListMatches" xml:space="preserve">
+    <value>The following packages were found among the working sources.
+Please specify one of them using the `--source` option to proceed.</value>
+    <comment>{Locked="--source"}</comment>
+  </data>
+  <data name="SearchFailureErrorNoMatches" xml:space="preserve">
+    <value>No packages were found among the working sources.</value>
+  </data>
+  <data name="FeaturesMessageDisabledByBuild" xml:space="preserve">
+    <value>This is a stable release of the Windows Package Manager. If you would like to try experimental features, please install a pre-release build. Instructions are available on GitHub at https://github.com/microsoft/winget-cli.</value>
+    <comment>{Locked="https://github.com/microsoft/winget-cli"}</comment>
+  </data>
+  <data name="WindowsPackageManager" xml:space="preserve">
+    <value>Windows Package Manager</value>
+    <comment>The product name.</comment>
+  </data>
+  <data name="ImportIgnorePackageVersionsArgumentDescription" xml:space="preserve">
+    <value>Ignore package versions in import file</value>
+  </data>
+  <data name="CountOutOfBoundsError" xml:space="preserve">
+    <value>The requested number of results must be between 1 and 1000.</value>
+  </data>
+  <data name="UpgradeDifferentInstallTechnologyInNewerVersions" xml:space="preserve">
+    <value>A newer version was found, but the install technology is different from the current version installed. Please uninstall the package and install the newer version.</value>
+  </data>
+  <data name="UpgradeDifferentInstallTechnology" xml:space="preserve">
+    <value>The install technology of the newer version specified is different from the current version installed. Please uninstall the package and install the newer version.</value>
+  </data>
+  <data name="WindowsPackageManagerPreview" xml:space="preserve">
+    <value>Windows Package Manager (Preview)</value>
+    <comment>The product name plus an indicator that this is a pre-release version.</comment>
+  </data>
+  <data name="InstallArchitectureArgumentDescription" xml:space="preserve">
+    <value>Select the architecture to install</value>
+  </data>
+  <data name="IncludeUnknownArgumentDescription" xml:space="preserve">
+    <value>Upgrade packages even if their current version cannot be determined</value>
+  </data>
+  <data name="UpgradeUnknownVersionExplanation" xml:space="preserve">
+    <value>This package's version number cannot be determined. To upgrade it anyway, add the argument --include-unknown to your previous command.</value>
+    <comment>{Locked="--include-unknown"}</comment>
+  </data>
+  <data name="UpgradeUnknownCount" xml:space="preserve">
+    <value>packages have version numbers that cannot be determined. Use "--include-unknown" to see all results.</value>
+    <comment>{Locked="--include-unknown"} This string is preceded by a (integer) number of packages that do not have notated versions. </comment>
+  </data>
+  <data name="UpgradeUnknownCountSingle" xml:space="preserve">
+    <value>package has a version number that cannot be determined. Use "--include-unknown" to see all results.</value>
+    <comment>{Locked="--include-unknown"} This string is preceded by a (integer) number of packages that do not have notated versions.</comment>
   </data>
 </root>

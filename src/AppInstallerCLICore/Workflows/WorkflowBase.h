@@ -3,7 +3,7 @@
 #pragma once
 #include "ExecutionArgs.h"
 #include <winget/ExperimentalFeature.h>
-#include <AppInstallerRepositorySearch.h>
+#include <winget/RepositorySearch.h>
 
 #include <string>
 #include <string_view>
@@ -56,11 +56,22 @@ namespace AppInstaller::CLI::Workflow
         std::string m_name;
     };
 
+    // Helper to report exceptions and return the HRESULT.
+    HRESULT HandleException(Execution::Context& context, std::exception_ptr exception);
+
     // Creates the source object.
     // Required Args: None
     // Inputs: None
     // Outputs: Source
-    void OpenSource(Execution::Context& context);
+    struct OpenSource : public WorkflowTask
+    {
+        OpenSource(bool forDependencies = false) : WorkflowTask("OpenSource"), m_forDependencies(forDependencies) {}
+
+        void operator()(Execution::Context& context) const override;
+    
+    private:
+        bool m_forDependencies;
+    };
 
     // Creates a source object for a source specified by name, and adds it to the list of open sources.
     // Required Args: None
@@ -82,12 +93,13 @@ namespace AppInstaller::CLI::Workflow
     // Outputs: Source
     struct OpenPredefinedSource : public WorkflowTask
     {
-        OpenPredefinedSource(Repository::PredefinedSource source) : WorkflowTask("OpenPredefinedSource"), m_predefinedSource(source) {}
+        OpenPredefinedSource(Repository::PredefinedSource source, bool forDependencies = false) : WorkflowTask("OpenPredefinedSource"), m_predefinedSource(source), m_forDependencies(forDependencies) {}
 
         void operator()(Execution::Context& context) const override;
 
     private:
         Repository::PredefinedSource m_predefinedSource;
+        bool m_forDependencies;
     };
 
     // Creates a composite source from the given predefined source and the existing source.
@@ -96,12 +108,13 @@ namespace AppInstaller::CLI::Workflow
     // Outputs: Source
     struct OpenCompositeSource : public WorkflowTask
     {
-        OpenCompositeSource(Repository::PredefinedSource source) : WorkflowTask("OpenCompositeSource"), m_predefinedSource(source) {}
+        OpenCompositeSource(Repository::PredefinedSource source, bool forDependencies = false) : WorkflowTask("OpenCompositeSource"), m_predefinedSource(source), m_forDependencies(forDependencies) {}
 
         void operator()(Execution::Context& context) const override;
 
     private:
         Repository::PredefinedSource m_predefinedSource;
+        bool m_forDependencies;
     };
 
     // Performs a search on the source.
@@ -164,6 +177,12 @@ namespace AppInstaller::CLI::Workflow
         bool m_onlyShowUpgrades;
     };
 
+    // Handles failures in the SearchResult either by warning or failing.
+    // Required Args: None
+    // Inputs: SearchResult
+    // Outputs: None
+    void HandleSearchResultFailures(Execution::Context& context);
+
     // Outputs the search results when multiple packages found but only one expected.
     // Required Args: None
     // Inputs: SearchResult
@@ -194,7 +213,7 @@ namespace AppInstaller::CLI::Workflow
     // Ensures that there is only one result in the search.
     // Required Args: bool indicating if the search result is from installed source
     // Inputs: SearchResult
-    // Outputs: None
+    // Outputs: Package
     struct EnsureOneMatchFromSearchResult : public WorkflowTask
     {
         EnsureOneMatchFromSearchResult(bool isFromInstalledSource) :
@@ -277,6 +296,12 @@ namespace AppInstaller::CLI::Workflow
     // Outputs: None
     void ReportManifestIdentity(Execution::Context& context);
 
+    // Reports the manifest's identity with version.
+    // Required Args: None
+    // Inputs: Manifest
+    // Outputs: None
+    void ReportManifestIdentityWithVersion(Execution::Context& context);
+
     // Composite flow that produces a manifest; either from one given on the command line or by searching.
     // Required Args: None
     // Inputs: None
@@ -327,13 +352,26 @@ namespace AppInstaller::CLI::Workflow
     // Outputs: ExecutionStage
     struct ReportExecutionStage : public WorkflowTask
     {
-        ReportExecutionStage(ExecutionStage stage, bool allowBackward = false) : WorkflowTask("ReportExecutionStage"), m_stage(stage), m_allowBackward(allowBackward) {}
+        ReportExecutionStage(ExecutionStage stage) : WorkflowTask("ReportExecutionStage"), m_stage(stage) {}
 
         void operator()(Execution::Context& context) const override;
 
     private:
         ExecutionStage m_stage;
-        bool m_allowBackward;
+    };
+
+    // Handles all opened source(s) agreements if needed.
+    // Required Args: The source to be checked for agreements
+    // Inputs: None
+    // Outputs: None
+    struct HandleSourceAgreements : public WorkflowTask
+    {
+        HandleSourceAgreements(Repository::Source source) : WorkflowTask("HandleSourceAgreements"), m_source(std::move(source)) {}
+
+        void operator()(Execution::Context& context) const override;
+
+    private:
+        Repository::Source m_source;
     };
 }
 

@@ -8,6 +8,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #define AICLI_LOG(_channel_,_level_,_outstream_) \
@@ -20,6 +21,22 @@
             AppInstaller::Logging::LoggingStream _aicli_log_strstr; \
             _aicli_log_strstr _outstream_; \
             _aicli_log_log.Write(_aicli_log_channel, _aicli_log_level, _aicli_log_strstr.str()); \
+        } \
+    } while (0, 0)
+
+// Consider using this macro when the string might be larger than 4K.
+// The normal macro has some buffering that occurs; it can cut off larger strings and is slower.
+#define AICLI_LOG_LARGE_STRING(_channel_,_level_,_headerStream_,_largeString_) \
+    do { \
+        auto _aicli_log_channel = AppInstaller::Logging::Channel:: _channel_; \
+        auto _aicli_log_level = AppInstaller::Logging::Level:: _level_; \
+        auto& _aicli_log_log = AppInstaller::Logging::Log(); \
+        if (_aicli_log_log.IsEnabled(_aicli_log_channel, _aicli_log_level)) \
+        { \
+            AppInstaller::Logging::LoggingStream _aicli_log_strstr; \
+            _aicli_log_strstr _headerStream_; \
+            _aicli_log_log.Write(_aicli_log_channel, _aicli_log_level, _aicli_log_strstr.str()); \
+            _aicli_log_log.WriteDirect(_aicli_log_channel, _aicli_log_level, _largeString_); \
         } \
     } while (0, 0)
 
@@ -65,6 +82,9 @@ namespace AppInstaller::Logging
 
         // Informs the logger of the given log.
         virtual void Write(Channel channel, Level level, std::string_view message) noexcept = 0;
+
+        // Informs the logger of the given log with the intention that no buffering occurs (in winget code).
+        virtual void WriteDirect(std::string_view message) noexcept = 0;
     };
 
     // This type contains the set of loggers that diagnostic logging will be sent to.
@@ -72,6 +92,8 @@ namespace AppInstaller::Logging
     // desired level, as nothing is enabled by default.
     struct DiagnosticLogger
     {
+        DiagnosticLogger() = default;
+
         ~DiagnosticLogger() = default;
 
         DiagnosticLogger(const DiagnosticLogger&) = delete;
@@ -118,19 +140,18 @@ namespace AppInstaller::Logging
         // Writes a log line, if the given channel and level are enabled.
         void Write(Channel channel, Level level, std::string_view message);
 
+        // Writes a log line, if the given channel and level are enabled.
+        // Use to make large logs more efficient by writing directly to the output streams.
+        void WriteDirect(Channel channel, Level level, std::string_view message);
+
     private:
-        DiagnosticLogger() = default;
 
         std::vector<std::unique_ptr<ILogger>> m_loggers;
         uint64_t m_enabledChannels = 0;
         Level m_enabledLevel = Level::Info;
     };
 
-    // Helper to make the call sites look clean.
-    inline DiagnosticLogger& Log()
-    {
-        return DiagnosticLogger::GetInstance();
-    }
+    DiagnosticLogger& Log();
 
     // Adds the default file logger to the DiagnosticLogger.
     void AddFileLogger();
@@ -151,12 +172,6 @@ namespace AppInstaller::Logging
     {
         // Force use of the UTF-8 string from a file path.
         // This should not be necessary when we move to C++20 and convert to using u8string.
-        friend AppInstaller::Logging::LoggingStream& operator<<(AppInstaller::Logging::LoggingStream& out, std::filesystem::path& path)
-        {
-            out.m_out << path.u8string();
-            return out;
-        }
-
         friend AppInstaller::Logging::LoggingStream& operator<<(AppInstaller::Logging::LoggingStream& out, const std::filesystem::path& path)
         {
             out.m_out << path.u8string();
@@ -165,7 +180,8 @@ namespace AppInstaller::Logging
 
         // Everything else.
         template <typename T>
-        friend AppInstaller::Logging::LoggingStream& operator<<(AppInstaller::Logging::LoggingStream& out, T&& t)
+        friend std::enable_if_t<!std::is_same_v<std::decay_t<T>, std::filesystem::path>, AppInstaller::Logging::LoggingStream&>
+            operator<<(AppInstaller::Logging::LoggingStream& out, T&& t)
         {
             out.m_out << std::forward<T>(t);
             return out;

@@ -230,6 +230,26 @@ namespace AppInstaller::Manifest
         return result;
     }
 
+    ElevationRequirementEnum ConvertToElevationRequirementEnum(const std::string& in)
+    {
+        ElevationRequirementEnum result = ElevationRequirementEnum::Unknown;
+
+        if (Utility::CaseInsensitiveEquals(in, "elevationRequired"))
+        {
+            result = ElevationRequirementEnum::ElevationRequired;
+        }
+        else if (Utility::CaseInsensitiveEquals(in, "elevationProhibited"))
+        {
+            result = ElevationRequirementEnum::ElevationProhibited;
+        }
+        else if (Utility::CaseInsensitiveEquals(in, "elevatesSelf"))
+        {
+            result = ElevationRequirementEnum::ElevatesSelf;
+        }
+
+        return result;
+    }
+
     ManifestTypeEnum ConvertToManifestTypeEnum(const std::string& in)
     {
         if (in == "singleton")
@@ -262,31 +282,100 @@ namespace AppInstaller::Manifest
         }
     }
 
+    ExpectedReturnCodeEnum ConvertToExpectedReturnCodeEnum(const std::string& in)
+    {
+        std::string inStrLower = Utility::ToLower(in);
+        ExpectedReturnCodeEnum result = ExpectedReturnCodeEnum::Unknown;
+
+        if (inStrLower == "packageinuse")
+        {
+            result = ExpectedReturnCodeEnum::PackageInUse;
+        }
+        else if (inStrLower == "installinprogress")
+        {
+            result = ExpectedReturnCodeEnum::InstallInProgress;
+        }
+        else if (inStrLower == "fileinuse")
+        {
+            result = ExpectedReturnCodeEnum::FileInUse;
+        }
+        else if (inStrLower == "missingdependency")
+        {
+            result = ExpectedReturnCodeEnum::MissingDependency;
+        }
+        else if (inStrLower == "diskfull")
+        {
+            result = ExpectedReturnCodeEnum::DiskFull;
+        }
+        else if (inStrLower == "insufficientmemory")
+        {
+            result = ExpectedReturnCodeEnum::InsufficientMemory;
+        }
+        else if (inStrLower == "nonetwork")
+        {
+            result = ExpectedReturnCodeEnum::NoNetwork;
+        }
+        else if (inStrLower == "contactsupport")
+        {
+            result = ExpectedReturnCodeEnum::ContactSupport;
+        }
+        else if (inStrLower == "rebootrequiredtofinish")
+        {
+            result = ExpectedReturnCodeEnum::RebootRequiredToFinish;
+        }
+        else if (inStrLower == "rebootrequiredforinstall")
+        {
+            result = ExpectedReturnCodeEnum::RebootRequiredForInstall;
+        }
+        else if (inStrLower == "rebootinitiated")
+        {
+            result = ExpectedReturnCodeEnum::RebootInitiated;
+        }
+        else if (inStrLower == "cancelledbyuser")
+        {
+            result = ExpectedReturnCodeEnum::CancelledByUser;
+        }
+        else if (inStrLower == "alreadyinstalled")
+        {
+            result = ExpectedReturnCodeEnum::AlreadyInstalled;
+        }
+        else if (inStrLower == "downgrade")
+        {
+            result = ExpectedReturnCodeEnum::Downgrade;
+        }
+        else if (inStrLower == "blockedbypolicy")
+        {
+            result = ExpectedReturnCodeEnum::BlockedByPolicy;
+        }
+
+        return result;
+    }
+
     std::string_view InstallerTypeToString(InstallerTypeEnum installerType)
     {
         switch (installerType)
         {
         case InstallerTypeEnum::Exe:
-            return "Exe"sv;
+            return "exe"sv;
         case InstallerTypeEnum::Inno:
-            return "Inno"sv;
+            return "inno"sv;
         case InstallerTypeEnum::Msi:
-            return "Msi"sv;
+            return "msi"sv;
         case InstallerTypeEnum::Msix:
-            return "Msix"sv;
+            return "msix"sv;
         case InstallerTypeEnum::Nullsoft:
-            return "Nullsoft"sv;
+            return "nullsoft"sv;
         case InstallerTypeEnum::Wix:
-            return "Wix"sv;
+            return "wix"sv;
         case InstallerTypeEnum::Zip:
-            return "Zip"sv;
+            return "zip"sv;
         case InstallerTypeEnum::Burn:
-            return "Burn"sv;
+            return "burn"sv;
         case InstallerTypeEnum::MSStore:
-            return "MSStore"sv;
+            return "msstore"sv;
         }
 
-        return "Unknown"sv;
+        return "unknown"sv;
     }
 
     std::string_view ScopeToString(ScopeEnum scope)
@@ -308,6 +397,18 @@ namespace AppInstaller::Manifest
     }
 
     bool DoesInstallerTypeUseProductCode(InstallerTypeEnum installerType)
+    {
+        return (
+            installerType == InstallerTypeEnum::Exe ||
+            installerType == InstallerTypeEnum::Inno ||
+            installerType == InstallerTypeEnum::Msi ||
+            installerType == InstallerTypeEnum::Nullsoft ||
+            installerType == InstallerTypeEnum::Wix ||
+            installerType == InstallerTypeEnum::Burn
+            );
+    }
+
+    bool DoesInstallerTypeWriteAppsAndFeaturesEntry(InstallerTypeEnum installerType)
     {
         return (
             installerType == InstallerTypeEnum::Exe ||
@@ -378,4 +479,154 @@ namespace AppInstaller::Manifest
             return {};
         }
     }
+
+    std::map<DWORD, ExpectedReturnCodeEnum> GetDefaultKnownReturnCodes(InstallerTypeEnum installerType)
+    {
+        switch (installerType)
+        {
+        case InstallerTypeEnum::Burn:
+        case InstallerTypeEnum::Wix:
+        case InstallerTypeEnum::Msi:
+            // See https://docs.microsoft.com/windows/win32/msi/error-codes
+            return
+            {
+                { ERROR_INSTALL_ALREADY_RUNNING, ExpectedReturnCodeEnum::InstallInProgress },
+                { ERROR_DISK_FULL, ExpectedReturnCodeEnum::DiskFull },
+                { ERROR_INSTALL_SERVICE_FAILURE, ExpectedReturnCodeEnum::ContactSupport },
+                { ERROR_SUCCESS_REBOOT_REQUIRED, ExpectedReturnCodeEnum::RebootRequiredToFinish },
+                { ERROR_SUCCESS_REBOOT_INITIATED, ExpectedReturnCodeEnum::RebootInitiated },
+                { ERROR_INSTALL_USEREXIT, ExpectedReturnCodeEnum::CancelledByUser },
+                { ERROR_PRODUCT_VERSION, ExpectedReturnCodeEnum::AlreadyInstalled },
+                { ERROR_INSTALL_REJECTED, ExpectedReturnCodeEnum::BlockedByPolicy },
+            };
+        case InstallerTypeEnum::Inno:
+            // See https://jrsoftware.org/ishelp/index.php?topic=setupexitcodes
+            return
+            {
+                { 2, ExpectedReturnCodeEnum::CancelledByUser },
+                { 5, ExpectedReturnCodeEnum::CancelledByUser },
+                { 8, ExpectedReturnCodeEnum::RebootRequiredForInstall },
+            };
+        case InstallerTypeEnum::Msix:
+            // See https://docs.microsoft.com/en-us/windows/win32/appxpkg/troubleshooting
+            return
+            {
+                { HRESULT_FROM_WIN32(ERROR_INSTALL_PREREQUISITE_FAILED), ExpectedReturnCodeEnum::MissingDependency },
+                { HRESULT_FROM_WIN32(ERROR_INSTALL_RESOLVE_DEPENDENCY_FAILED), ExpectedReturnCodeEnum::MissingDependency },
+                { HRESULT_FROM_WIN32(ERROR_INSTALL_OPTIONAL_PACKAGE_REQUIRES_MAIN_PACKAGE), ExpectedReturnCodeEnum::MissingDependency },
+                { HRESULT_FROM_WIN32(ERROR_INSTALL_OUT_OF_DISK_SPACE), ExpectedReturnCodeEnum::DiskFull },
+                { HRESULT_FROM_WIN32(ERROR_INSTALL_CANCEL), ExpectedReturnCodeEnum::CancelledByUser },
+                { HRESULT_FROM_WIN32(ERROR_PACKAGE_ALREADY_EXISTS), ExpectedReturnCodeEnum::AlreadyInstalled },
+                { HRESULT_FROM_WIN32(ERROR_INSTALL_PACKAGE_DOWNGRADE), ExpectedReturnCodeEnum::Downgrade },
+            };
+        default:
+            return {};
+        }
+    }
+
+    void DependencyList::Add(const Dependency& newDependency)
+    {
+        Dependency* existingDependency = this->HasDependency(newDependency);
+
+        if (existingDependency != NULL) {
+            if (newDependency.MinVersion)
+            {
+                if (existingDependency->MinVersion)
+                {
+                    const auto& newDependencyVersion = Utility::Version(newDependency.MinVersion.value());
+                    const auto& existingDependencyVersion = Utility::Version(existingDependency->MinVersion.value());
+                    if (newDependencyVersion > existingDependencyVersion)
+                    {
+                        existingDependency->MinVersion.value() = newDependencyVersion.ToString();
+                    }
+                }
+                else
+                {
+                    existingDependency->MinVersion.value() = newDependency.MinVersion.value();
+                }
+            }
+        }
+        else
+        {
+            m_dependencies.push_back(newDependency);
+        }
+    }
+
+    void DependencyList::Add(const DependencyList& otherDependencyList)
+    {
+        for (const auto& dependency : otherDependencyList.m_dependencies)
+        {
+            this->Add(dependency);
+        }
+    }
+
+    bool DependencyList::HasAny() const { return !m_dependencies.empty(); }
+    bool DependencyList::HasAnyOf(DependencyType type) const
+    {
+        for (const auto& dependency : m_dependencies)
+        {
+            if (dependency.Type == type) return true;
+        };
+        return false;
+    }
+
+    Dependency* DependencyList::HasDependency(const Dependency& dependencyToSearch)
+    {
+        for (auto& dependency : m_dependencies) {
+            if (dependency.Type == dependencyToSearch.Type && ICUCaseInsensitiveEquals(dependency.Id, dependencyToSearch.Id))
+            {
+                return &dependency;
+            }
+        }
+        return nullptr;
+    }
+
+    // for testing purposes
+    bool DependencyList::HasExactDependency(DependencyType type, string_t id, string_t minVersion)
+    {
+        for (const auto& dependency : m_dependencies)
+        {
+            if (dependency.Type == type && Utility::ICUCaseInsensitiveEquals(dependency.Id, id))
+            {
+                if (dependency.MinVersion) {
+                    if (dependency.MinVersion.value() == minVersion)
+                    {
+                        return true;
+                    }
+                }
+                else {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    size_t DependencyList::Size()
+    {
+        return m_dependencies.size();
+    }
+
+    void DependencyList::ApplyToType(DependencyType type, std::function<void(const Dependency&)> func) const
+    {
+        for (const auto& dependency : m_dependencies)
+        {
+            if (dependency.Type == type) func(dependency);
+        }
+    }
+
+    void DependencyList::ApplyToAll(std::function<void(const Dependency&)> func) const
+    {
+        for (const auto& dependency : m_dependencies)
+        {
+            func(dependency);
+        }
+    }
+
+    bool DependencyList::Empty() const
+    {
+        return m_dependencies.empty();
+    }
+
+    void DependencyList::Clear() { m_dependencies.clear(); }
 }

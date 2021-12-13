@@ -38,7 +38,9 @@ namespace AppInstaller::CLI::Execution
             Override, //Override args are (and the only args) directly passed to installer
             InstallLocation,
             InstallScope,
+            InstallArchitecture,
             HashOverride, // Ignore hash mismatches
+            AcceptPackageAgreements, // Accept all license agreements for packages
 
             //Source Command
             SourceName,
@@ -67,6 +69,10 @@ namespace AppInstaller::CLI::Execution
             IgnoreUnavailable,
             IgnoreVersions,
 
+            // Setting Command
+            AdminSettingEnable,
+            AdminSettingDisable,
+
             // Other
             All, // Used in Update command to update all installed packages to latest
             ListVersions, // Used in Show command to list all available versions of an app
@@ -76,6 +82,10 @@ namespace AppInstaller::CLI::Execution
             Help, // Show command usage
             Info, // Show general info about WinGet
             VerboseLogs, // Increases winget logging level to verbose
+            DependencySource, // Index source to be queried against for finding dependencies
+            CustomHeader, // Optional Rest source header
+            AcceptSourceAgreements, // Accept all source agreements
+            IncludeUnknown, // Used in Upgrade command to allow upgrades of packages with unknown versions
 
             // Used for demonstration purposes
             ExperimentalArg,
@@ -130,6 +140,18 @@ namespace AppInstaller::CLI::Execution
         size_t GetArgsCount()
         {
             return m_parsedArgs.size();
+        }
+
+        std::vector<Type> GetTypes()
+        {
+            std::vector<Type> types;
+
+            for (auto const& i : m_parsedArgs)
+            {
+                types.emplace_back(i.first);
+            }
+
+            return types;
         }
 
     private:

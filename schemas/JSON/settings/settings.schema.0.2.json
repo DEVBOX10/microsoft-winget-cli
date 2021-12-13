@@ -26,7 +26,6 @@
           "enum": [
             "accent",
             "rainbow",
-            "plain",
             "retro"
           ]
         }
@@ -55,6 +54,23 @@
           },
           "minItems": 1,
           "maxItems": 10
+        },
+        "architectures": {
+          "description": "The architecture(s) to use for a package install",
+          "type": "array",
+          "items": {
+            "uniqueItems": "true",
+            "type": "string",
+            "enum": [
+              "neutral",
+              "x64",
+              "x86",
+              "arm64",
+              "arm"
+            ],
+            "minItems": 1,
+            "maxItems": 4
+          }
         }
       }
     },
@@ -114,28 +130,13 @@
           "type": "boolean",
           "default": false
         },
-        "experimentalMSStore": {
-          "description": "Experimental support for Microsoft Store source",
+        "dependencies": {
+          "description": "Support for package dependencies",
           "type": "boolean",
           "default": false
         },
-        "list": {
-          "description": "Enable the list command while it is in development",
-          "type": "boolean",
-          "default": false
-        },
-        "upgrade": {
-          "description": "Enable the upgrade command while it is in development",
-          "type": "boolean",
-          "default": false
-        },
-        "uninstall": {
-          "description": "Enable the uninstall command while it is in development",
-          "type": "boolean",
-          "default": false
-        },
-        "restSource": {
-          "description": "Enable the rest source support while it is in development",
+        "directMSI": {
+          "description": "Enable use of MSI APIs rather than msiexec for MSI installs",
           "type": "boolean",
           "default": false
         }

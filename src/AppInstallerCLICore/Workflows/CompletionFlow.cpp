@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-#pragma once
 #include "pch.h"
 #include "CompletionFlow.h"
 
@@ -12,7 +11,7 @@ namespace AppInstaller::CLI::Workflow
     namespace
     {
         // Outputs the completion string, wrapping it in quotes if needed.
-        void OutputCompletionString(Execution::NoVTStream& stream, std::string_view value)
+        void OutputCompletionString(Execution::OutputStream& stream, std::string_view value)
         {
             if (value.find_first_of(' ') != std::string_view::npos)
             {
@@ -30,7 +29,7 @@ namespace AppInstaller::CLI::Workflow
         const std::string& word = context.Get<Data::CompletionData>().Word();
         auto stream = context.Reporter.Completion();
 
-        for (const auto& source : Repository::GetSources())
+        for (const auto& source : Repository::Source::GetCurrentSources())
         {
             if (word.empty() || Utility::ICUCaseInsensitiveStartsWith(source.Name, word))
             {
@@ -115,7 +114,7 @@ namespace AppInstaller::CLI::Workflow
         case Execution::Args::Type::Version:
         case Execution::Args::Type::Channel:
             context <<
-                Workflow::OpenSource;
+                Workflow::OpenSource();
             break;
         }
 

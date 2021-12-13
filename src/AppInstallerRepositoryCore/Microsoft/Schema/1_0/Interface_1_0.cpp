@@ -24,7 +24,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
     namespace
     {
         // Gets an existing manifest by its rowid., if it exists.
-        std::optional<SQLite::rowid_t> GetExistingManifestId(SQLite::Connection& connection, const Manifest::Manifest& manifest)
+        std::optional<SQLite::rowid_t> GetExistingManifestId(const SQLite::Connection& connection, const Manifest::Manifest& manifest)
         {
             std::optional<SQLite::rowid_t> idId = IdTable::SelectIdByValue(connection, manifest.Id, true);
             if (!idId)
@@ -123,6 +123,11 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
             }
         }
 
+        bool NotNeededInternal(const SQLite::Connection& connection, std::string_view, std::string_view valueName, SQLite::rowid_t id)
+        {
+            return !ManifestTable::IsValueReferenced(connection, valueName, id);
+        }
+
         // Updates the manifest column and related table based on the given value.
         template <typename Table>
         void UpdateManifestValueById(SQLite::Connection& connection, const typename Table::value_t& value, SQLite::rowid_t manifestId, bool overwriteLikeMatch = false)
@@ -133,7 +138,10 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
 
             ManifestTable::UpdateValueIdById<Table>(connection, manifestId, newValueId);
 
-            Table::DeleteIfNotNeededById(connection, oldValueId);
+            if (NotNeededInternal(connection, Table::TableName(), Table::ValueName(), oldValueId))
+            {
+                Table::DeleteById(connection, oldValueId);
+            }
         }
     }
 
@@ -142,7 +150,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
         return { 1, 0 };
     }
 
-    void Interface::CreateTables(SQLite::Connection& connection)
+    void Interface::CreateTables(SQLite::Connection& connection, CreateOptions options)
     {
         SQLite::Savepoint savepoint = SQLite::Savepoint::Create(connection, "createtables_v1_0");
 
@@ -160,7 +168,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
             { MonikerTable::ValueName(), false, false },
             { VersionTable::ValueName(), true, false },
             { ChannelTable::ValueName(), true, false },
-            { PathPartTable::ValueName(), false, true }
+            { PathPartTable::ValueName(), false, WI_IsFlagClear(options, CreateOptions::SupportPathless) }
             });
 
         TagsTable::Create_deprecated(connection);
@@ -169,7 +177,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
         savepoint.Commit();
     }
 
-    SQLite::rowid_t Interface::AddManifest(SQLite::Connection& connection, const Manifest::Manifest& manifest, const std::filesystem::path& relativePath)
+    SQLite::rowid_t Interface::AddManifest(SQLite::Connection& connection, const Manifest::Manifest& manifest, const std::optional<std::filesystem::path>& relativePath)
     {
         auto manifestResult = GetExistingManifestId(connection, manifest);
 
@@ -181,7 +189,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
         auto [pathAdded, pathLeafId] = PathPartTable::EnsurePathExists(connection, relativePath, true);
 
         // If we get false from the function, this manifest path already exists in the index.
-        THROW_HR_IF(HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS), !pathAdded);
+        THROW_HR_IF(HRESULT_FROM_WIN32(ERROR_ALREADY_EXISTS), relativePath && !pathAdded);
 
         // Ensure that all of the 1:1 data exists.
         SQLite::rowid_t idId = IdTable::EnsureExists(connection, manifest.Id, true);
@@ -209,7 +217,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
         return manifestId;
     }
 
-    std::pair<bool, SQLite::rowid_t> Interface::UpdateManifest(SQLite::Connection& connection, const Manifest::Manifest& manifest, const std::filesystem::path& relativePath)
+    std::pair<bool, SQLite::rowid_t> Interface::UpdateManifest(SQLite::Connection& connection, const Manifest::Manifest& manifest, const std::optional<std::filesystem::path>& relativePath)
     {
         auto manifestResult = GetExistingManifestId(connection, manifest);
 
@@ -260,7 +268,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
         auto [existingPathLeafId] = ManifestTable::GetIdsById<PathPartTable>(connection, manifestId);
         auto [pathAdded, newPathLeafId] = PathPartTable::EnsurePathExists(connection, relativePath, true);
 
-        if (pathAdded)
+        if (relativePath && pathAdded)
         {
             // Path was added, so we need to update the manifest table and delete the old path
             ManifestTable::UpdateValueIdById<PathPartTable>(connection, manifestId, newPathLeafId);
@@ -282,30 +290,54 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
         return { indexModified, manifestId };
     }
 
-    SQLite::rowid_t Interface::RemoveManifest(SQLite::Connection& connection, const Manifest::Manifest& manifest, const std::filesystem::path&)
+    SQLite::rowid_t Interface::RemoveManifest(SQLite::Connection& connection, const Manifest::Manifest& manifest)
     {
         auto manifestResult = GetExistingManifestId(connection, manifest);
 
         // If the manifest doesn't actually exist, fail the remove.
         THROW_HR_IF(E_NOT_SET, !manifestResult);
 
-        SQLite::rowid_t manifestId = manifestResult.value();
+        RemoveManifestById(connection, manifestResult.value());
 
+        return manifestResult.value();
+    }
+
+    void Interface::RemoveManifestById(SQLite::Connection& connection, SQLite::rowid_t manifestId)
+    {
         // Get the ids of the values from the manifest table
         auto [idId, nameId, monikerId, versionId, channelId, pathLeafId] = 
             ManifestTable::GetIdsById<IdTable, NameTable, MonikerTable, VersionTable, ChannelTable, PathPartTable>(connection, manifestId);
 
-        SQLite::Savepoint savepoint = SQLite::Savepoint::Create(connection, "removemanifest_v1_0");
+        SQLite::Savepoint savepoint = SQLite::Savepoint::Create(connection, "RemoveManifestById_v1_0");
 
         // Remove the manifest row
         ManifestTable::DeleteById(connection, manifestId);
 
         // Remove all of the 1:1 data that is no longer referenced.
-        IdTable::DeleteIfNotNeededById(connection, idId);
-        NameTable::DeleteIfNotNeededById(connection, nameId);
-        MonikerTable::DeleteIfNotNeededById(connection, monikerId);
-        VersionTable::DeleteIfNotNeededById(connection, versionId);
-        ChannelTable::DeleteIfNotNeededById(connection, channelId);
+        if (NotNeeded(connection, IdTable::TableName(), IdTable::ValueName(), idId))
+        {
+            IdTable::DeleteById(connection, idId);
+        }
+        
+        if (NotNeeded(connection, NameTable::TableName(), NameTable::ValueName(), nameId))
+        {
+            NameTable::DeleteById(connection, nameId);
+        }
+
+        if (NotNeeded(connection, MonikerTable::TableName(), MonikerTable::ValueName(), monikerId))
+        {
+            MonikerTable::DeleteById(connection, monikerId);
+        }
+        
+        if (NotNeeded(connection, VersionTable::TableName(), VersionTable::ValueName(), versionId))
+        {
+            VersionTable::DeleteById(connection, versionId);
+        }
+        
+        if (NotNeeded(connection, ChannelTable::TableName(), ChannelTable::ValueName(), channelId))
+        {
+            ChannelTable::DeleteById(connection, channelId);
+        }
 
         // Remove the path
         PathPartTable::RemovePathById(connection, pathLeafId);
@@ -315,8 +347,11 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
         CommandsTable::DeleteIfNotNeededByManifestId(connection, manifestId);
 
         savepoint.Commit();
+    }
 
-        return manifestId;
+    bool Interface::NotNeeded(const SQLite::Connection& connection, std::string_view tableName, std::string_view valueName, SQLite::rowid_t id) const
+    {
+        return NotNeededInternal(connection, tableName, valueName, id);
     }
 
     void Interface::PrepareForPackaging(SQLite::Connection& connection)
@@ -509,6 +544,21 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
     std::optional<SQLite::rowid_t> Interface::GetManifestIdByKey(const SQLite::Connection& connection, SQLite::rowid_t id, std::string_view version, std::string_view channel) const
     {
         return StaticGetManifestIdByKey(connection, id, version, channel);
+    }
+
+    std::optional<SQLite::rowid_t> Interface::GetManifestIdByManifest(const SQLite::Connection& connection, const Manifest::Manifest& manifest) const
+    {
+        return GetExistingManifestId(connection, manifest);
+    }
+
+    std::set<std::pair<SQLite::rowid_t, Utility::NormalizedString>> Interface::GetDependenciesByManifestRowId(const SQLite::Connection&, SQLite::rowid_t) const
+    {
+        return {};
+    }
+
+    std::vector<std::pair<SQLite::rowid_t, Utility::NormalizedString>> Interface::GetDependentsById(const SQLite::Connection&, AppInstaller::Manifest::string_t) const
+    {
+        return {};
     }
 
     std::vector<Utility::VersionAndChannel> Interface::GetVersionKeysById(const SQLite::Connection& connection, SQLite::rowid_t id) const

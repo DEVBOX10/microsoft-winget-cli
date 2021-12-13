@@ -138,7 +138,7 @@ namespace AppInstaller
         const typename Variant::variant_t& GetVariant(Enum e) const
         {
             auto itr = m_data.find(e);
-            THROW_HR_IF_MSG(E_NOT_SET, itr == m_data.cend(), "GetVariant(%d)", e);
+            THROW_HR_IF_MSG(E_NOT_SET, itr == m_data.cend(), "GetVariant(%d)", static_cast<int>(e));
             return itr->second;
         }
 
@@ -152,3 +152,13 @@ std::enable_if_t<std::is_enum_v<E>, std::ostream&> operator<<(std::ostream& out,
 {
     return out << AppInstaller::ToIntegral(e);
 }
+
+template <typename T>
+struct CopyConstructibleAtomic : public std::atomic<T>
+{
+    using std::atomic<T>::atomic;
+    using std::atomic<T>::operator=;
+
+    CopyConstructibleAtomic(const CopyConstructibleAtomic& other) :
+        std::atomic<T>(other.load()) {}
+};

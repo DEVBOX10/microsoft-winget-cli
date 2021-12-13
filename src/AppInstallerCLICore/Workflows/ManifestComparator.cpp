@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include "WorkflowBase.h"
+#include "ExecutionContext.h"
 #include "ManifestComparator.h"
 #include <winget/UserSettings.h>
 
@@ -25,9 +26,14 @@ namespace AppInstaller::CLI::Workflow
         {
             OSVersionFilter() : details::FilterField("OS Version") {}
 
-            bool IsApplicable(const Manifest::ManifestInstaller& installer) override
+            InapplicabilityFlags IsApplicable(const Manifest::ManifestInstaller& installer) override
             {
-                return installer.MinOSVersion.empty() || Runtime::IsCurrentOSVersionGreaterThanOrEqual(Utility::Version(installer.MinOSVersion));
+                if (installer.MinOSVersion.empty() || Runtime::IsCurrentOSVersionGreaterThanOrEqual(Utility::Version(installer.MinOSVersion)))
+                {
+                    return InapplicabilityFlags::None;
+                }
+
+                return InapplicabilityFlags::OSVersion;
             }
 
             std::string ExplainInapplicable(const Manifest::ManifestInstaller& installer) override
@@ -42,22 +48,89 @@ namespace AppInstaller::CLI::Workflow
         {
             MachineArchitectureComparator() : details::ComparisonField("Machine Architecture") {}
 
-            bool IsApplicable(const Manifest::ManifestInstaller& installer) override
+            MachineArchitectureComparator(std::vector<Utility::Architecture> allowedArchitectures) :
+                details::ComparisonField("Machine Architecture"), m_allowedArchitectures(std::move(allowedArchitectures))
             {
-                return Utility::IsApplicableArchitecture(installer.Arch) != Utility::InapplicableArchitecture;
+                AICLI_LOG(CLI, Verbose, << "Architecture Comparator created with allowed architectures: " << GetAllowedArchitecturesString());
+            }
+
+            // TODO: At some point we can do better about matching the currently installed architecture
+            static std::unique_ptr<MachineArchitectureComparator> Create(const Execution::Context& context, const Repository::IPackageVersion::Metadata&)
+            {
+                if (context.Contains(Execution::Data::AllowedArchitectures))
+                {
+                    const std::vector<Utility::Architecture>& allowedArchitectures = context.Get<Execution::Data::AllowedArchitectures>();
+                    if (!allowedArchitectures.empty())
+                    {
+                        // If the incoming data contains elements, we will use them to construct a final allowed list.
+                        // The algorithm is to take elements until we find Unknown, which indicates that any architecture is
+                        // acceptable at this point. The system supported set of architectures will then be placed at the end.
+                        std::vector<Utility::Architecture> result;
+                        bool addRemainingApplicableArchitectures = false;
+
+                        for (Utility::Architecture architecture : allowedArchitectures)
+                        {
+                            if (architecture == Utility::Architecture::Unknown)
+                            {
+                                addRemainingApplicableArchitectures = true;
+                                break;
+                            }
+
+                            // If the architecture is applicable and not already in our result set...
+                            if (Utility::IsApplicableArchitecture(architecture) != Utility::InapplicableArchitecture &&
+                                Utility::IsApplicableArchitecture(architecture, result) == Utility::InapplicableArchitecture)
+                            {
+                                result.push_back(architecture);
+                            }
+                        }
+
+                        if (addRemainingApplicableArchitectures)
+                        {
+                            for (Utility::Architecture architecture : Utility::GetApplicableArchitectures())
+                            {
+                                if (Utility::IsApplicableArchitecture(architecture, result) == Utility::InapplicableArchitecture)
+                                {
+                                    result.push_back(architecture);
+                                }
+                            }
+                        }
+
+                        return std::make_unique<MachineArchitectureComparator>(std::move(result));
+                    }
+                }
+
+                return std::make_unique<MachineArchitectureComparator>();
+            }
+
+            InapplicabilityFlags IsApplicable(const Manifest::ManifestInstaller& installer) override
+            {
+                if (CheckAllowedArchitecture(installer.Arch) == Utility::InapplicableArchitecture)
+                {
+                    return InapplicabilityFlags::MachineArchitecture;
+                }
+                
+                return InapplicabilityFlags::None;
             }
 
             std::string ExplainInapplicable(const Manifest::ManifestInstaller& installer) override
             {
-                std::string result = "Machine is not compatible with ";
+                std::string result;
+                if (Utility::IsApplicableArchitecture(installer.Arch) == Utility::InapplicableArchitecture)
+                {
+                    result = "Machine is not compatible with ";
+                }
+                else
+                {
+                    result = "Architecture was excluded by caller : ";
+                }
                 result += Utility::ToString(installer.Arch);
                 return result;
             }
 
             bool IsFirstBetter(const Manifest::ManifestInstaller& first, const Manifest::ManifestInstaller& second) override
             {
-                auto arch1 = Utility::IsApplicableArchitecture(first.Arch);
-                auto arch2 = Utility::IsApplicableArchitecture(second.Arch);
+                auto arch1 = CheckAllowedArchitecture(first.Arch);
+                auto arch2 = CheckAllowedArchitecture(second.Arch);
 
                 if (arch1 > arch2)
                 {
@@ -66,6 +139,37 @@ namespace AppInstaller::CLI::Workflow
 
                 return false;
             }
+
+        private:
+            int CheckAllowedArchitecture(Utility::Architecture architecture)
+            {
+                if (m_allowedArchitectures.empty())
+                {
+                    return Utility::IsApplicableArchitecture(architecture);
+                }
+                else
+                {
+                    return Utility::IsApplicableArchitecture(architecture, m_allowedArchitectures);
+                }
+            }
+
+            std::string GetAllowedArchitecturesString()
+            {
+                std::stringstream result;
+                bool prependComma = false;
+                for (Utility::Architecture architecture : m_allowedArchitectures)
+                {
+                    if (prependComma)
+                    {
+                        result << ", ";
+                    }
+                    result << Utility::ToString(architecture);
+                    prependComma = true;
+                }
+                return result.str();
+            }
+
+            std::vector<Utility::Architecture> m_allowedArchitectures;
         };
 
         struct InstalledTypeComparator : public details::ComparisonField
@@ -88,9 +192,14 @@ namespace AppInstaller::CLI::Workflow
                 return {};
             }
 
-            bool IsApplicable(const Manifest::ManifestInstaller& installer) override
+            InapplicabilityFlags IsApplicable(const Manifest::ManifestInstaller& installer) override
             {
-                return Manifest::IsInstallerTypeCompatible(installer.InstallerType, m_installedType);
+                if (Manifest::IsInstallerTypeCompatible(installer.InstallerType, m_installedType))
+                {
+                    return InapplicabilityFlags::None;
+                }
+
+                return InapplicabilityFlags::InstalledType;
             }
 
             std::string ExplainInapplicable(const Manifest::ManifestInstaller& installer) override
@@ -130,10 +239,15 @@ namespace AppInstaller::CLI::Workflow
                 return {};
             }
 
-            bool IsApplicable(const Manifest::ManifestInstaller& installer) override
+            InapplicabilityFlags IsApplicable(const Manifest::ManifestInstaller& installer) override
             {
                 // We have to assume the unknown scope will match our required scope, or the entire catalog would stop working for upgrade.
-                return installer.Scope == Manifest::ScopeEnum::Unknown || installer.Scope == m_requirement;
+                if (installer.Scope == Manifest::ScopeEnum::Unknown || installer.Scope == m_requirement)
+                {
+                    return InapplicabilityFlags::None;
+                }
+
+                return InapplicabilityFlags::InstalledScope;
             }
 
             std::string ExplainInapplicable(const Manifest::ManifestInstaller& installer) override
@@ -181,9 +295,14 @@ namespace AppInstaller::CLI::Workflow
                 }
             }
 
-            bool IsApplicable(const Manifest::ManifestInstaller& installer) override
+            InapplicabilityFlags IsApplicable(const Manifest::ManifestInstaller& installer) override
             {
-                return m_requirement == Manifest::ScopeEnum::Unknown || installer.Scope == m_requirement;
+                if (m_requirement == Manifest::ScopeEnum::Unknown || installer.Scope == m_requirement)
+                {
+                    return InapplicabilityFlags::None;
+                }
+
+                return InapplicabilityFlags::Scope;
             }
 
             std::string ExplainInapplicable(const Manifest::ManifestInstaller& installer) override
@@ -234,10 +353,16 @@ namespace AppInstaller::CLI::Workflow
                 return {};
             }
 
-            bool IsApplicable(const Manifest::ManifestInstaller& installer) override
+            InapplicabilityFlags IsApplicable(const Manifest::ManifestInstaller& installer) override
             {
                 // We have to assume an unknown installer locale will match our installed locale, or the entire catalog would stop working for upgrade.
-                return installer.Locale.empty() || Locale::GetDistanceOfLanguage(m_installedLocale, installer.Locale) >= Locale::MinimumDistanceScoreAsCompatibleMatch;
+                if (installer.Locale.empty() ||
+                    Locale::GetDistanceOfLanguage(m_installedLocale, installer.Locale) >= Locale::MinimumDistanceScoreAsCompatibleMatch)
+                {
+                    return InapplicabilityFlags::None;
+                }
+
+                return InapplicabilityFlags::InstalledLocale;
             }
 
             std::string ExplainInapplicable(const Manifest::ManifestInstaller& installer) override
@@ -303,22 +428,22 @@ namespace AppInstaller::CLI::Workflow
                 }
             }
 
-            bool IsApplicable(const Manifest::ManifestInstaller& installer) override
+            InapplicabilityFlags IsApplicable(const Manifest::ManifestInstaller& installer) override
             {
                 if (m_requirement.empty())
                 {
-                    return true;
+                    return InapplicabilityFlags::None;
                 }
 
                 for (auto const& requiredLocale : m_requirement)
                 {
                     if (Locale::GetDistanceOfLanguage(requiredLocale, installer.Locale) >= Locale::MinimumDistanceScoreAsPerfectMatch)
                     {
-                        return true;
+                        return InapplicabilityFlags::None;
                     }
                 }
 
-                return false;
+                return InapplicabilityFlags::Locale;
             }
 
             std::string ExplainInapplicable(const Manifest::ManifestInstaller& installer) override
@@ -385,7 +510,7 @@ namespace AppInstaller::CLI::Workflow
         };
     }
 
-    ManifestComparator::ManifestComparator(const Execution::Args& args, const Repository::IPackageVersion::Metadata& installationMetadata)
+    ManifestComparator::ManifestComparator(const Execution::Context& context, const Repository::IPackageVersion::Metadata& installationMetadata)
     {
         AddFilter(std::make_unique<OSVersionFilter>());
         AddFilter(InstalledScopeFilter::Create(installationMetadata));
@@ -401,56 +526,60 @@ namespace AppInstaller::CLI::Workflow
         }
         else
         {
-            AddComparator(LocaleComparator::Create(args));
+            AddComparator(LocaleComparator::Create(context.Args));
         }
 
-        AddComparator(ScopeComparator::Create(args));
-        AddComparator(std::make_unique<MachineArchitectureComparator>());
+        AddComparator(ScopeComparator::Create(context.Args));
+        AddComparator(MachineArchitectureComparator::Create(context, installationMetadata));
     }
 
-    std::optional<Manifest::ManifestInstaller> ManifestComparator::GetPreferredInstaller(const Manifest::Manifest& manifest)
+    InstallerAndInapplicabilities ManifestComparator::GetPreferredInstaller(const Manifest::Manifest& manifest)
     {
         AICLI_LOG(CLI, Info, << "Starting installer selection.");
 
         const Manifest::ManifestInstaller* result = nullptr;
+        std::vector<InapplicabilityFlags> inapplicabilitiesInstallers;
 
         for (const auto& installer : manifest.Installers)
         {
-            if (IsApplicable(installer) && (!result || IsFirstBetter(installer, *result)))
+            auto inapplicabilityInstaller = IsApplicable(installer);
+            if (inapplicabilityInstaller == InapplicabilityFlags::None)
             {
-                AICLI_LOG(CLI, Verbose, << "Installer " << installer << " is current best choice");
-                result = &installer;
+                if (!result || IsFirstBetter(installer, *result))
+                {
+                    AICLI_LOG(CLI, Verbose, << "Installer " << installer << " is current best choice");
+                    result = &installer;
+                }
+            }
+            else
+            {
+                inapplicabilitiesInstallers.push_back(inapplicabilityInstaller);
             }
         }
 
         if (!result)
         {
-            return {};
+            return { {}, std::move(inapplicabilitiesInstallers) };
         }
 
-        Logging::Telemetry().LogSelectedInstaller(
-            static_cast<int>(result->Arch),
-            result->Url,
-            Manifest::InstallerTypeToString(result->InstallerType),
-            Manifest::ScopeToString(result->Scope),
-            result->Locale);
-
-        return *result;
+        return { *result, std::move(inapplicabilitiesInstallers) };
     }
 
-    // TODO: Implement a mechanism for better error messaging for no applicable installer scenario
-    bool ManifestComparator::IsApplicable(const Manifest::ManifestInstaller& installer)
+    InapplicabilityFlags ManifestComparator::IsApplicable(const Manifest::ManifestInstaller& installer)
     {
+        InapplicabilityFlags inapplicabilityResult = InapplicabilityFlags::None;
+
         for (const auto& filter : m_filters)
         {
-            if (!filter->IsApplicable(installer))
+            auto inapplicability = filter->IsApplicable(installer);
+            if (inapplicability != InapplicabilityFlags::None)
             {
                 AICLI_LOG(CLI, Info, << "Installer " << installer << " not applicable: " << filter->ExplainInapplicable(installer));
-                return false;
+                WI_SetAllFlags(inapplicabilityResult, inapplicability);
             }
         }
 
-        return true;
+        return inapplicabilityResult;
     }
 
     bool ManifestComparator::IsFirstBetter(

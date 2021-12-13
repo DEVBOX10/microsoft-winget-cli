@@ -135,6 +135,11 @@ namespace AppInstaller::Utility {
         return hasher.Get();
     }
 
+    SHA256::HashBuffer SHA256::ComputeHash(std::string_view buffer)
+    {
+        return ComputeHash(reinterpret_cast<const std::uint8_t*>(buffer.data()), static_cast<std::uint32_t>(buffer.size()));
+    }
+
     SHA256::HashBuffer SHA256::ComputeHash(std::istream& in)
     {
         // Throw exceptions on badbit
@@ -169,6 +174,11 @@ namespace AppInstaller::Utility {
     void SHA256::SHA256ContextDeleter::operator()(SHA256Context* context)
     {
         delete context;
+    }
+
+    bool SHA256::AreEqual(const HashBuffer& first, const HashBuffer& second)
+    {
+        return (first.size() == second.size() && std::equal(first.begin(), first.end(), second.begin()));
     }
 
     void SHA256::EnsureNotFinished() const

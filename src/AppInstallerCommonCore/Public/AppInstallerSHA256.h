@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <string_view>
 
 namespace AppInstaller::Utility {
 
@@ -46,12 +47,18 @@ namespace AppInstaller::Utility {
         // Computes the hash of the given buffer immediately.
         static HashBuffer ComputeHash(const uint8_t* buffer, std::uint32_t cbBuffer);
 
+        // Computes the hash of the given string immediately.
+        static HashBuffer ComputeHash(std::string_view buffer);
+
         // Computes the hash from a given stream.
         static HashBuffer ComputeHash(std::istream& in);
 
         static std::string ConvertToString(const HashBuffer& hashBuffer);
 
         static HashBuffer ConvertToBytes(const std::string& hashStr);
+
+        // Returns a value indicating whether the two hashes are equal.
+        static bool AreEqual(const HashBuffer& first, const HashBuffer& second);
 
     private:
         void EnsureNotFinished() const;

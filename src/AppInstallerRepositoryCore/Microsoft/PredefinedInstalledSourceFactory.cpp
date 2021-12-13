@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-#pragma once
 #include "pch.h"
 #include "Microsoft/ARPHelper.h"
 #include "Microsoft/PredefinedInstalledSourceFactory.h"
@@ -90,26 +89,32 @@ namespace AppInstaller::Repository::Microsoft
                 
                 manifest.Installers[0].PackageFamilyName = familyName;
 
-                // Use the family name as a unique key for the path
-                auto manifestId = index.AddManifest(manifest, std::filesystem::path{ packageId.FamilyName().c_str() });
+                // Use the full name as a unique key for the path
+                auto manifestId = index.AddManifest(manifest, std::filesystem::path{ packageId.FullName().c_str() });
 
                 index.SetMetadataByManifestId(manifestId, PackageVersionMetadata::InstalledType, 
                     Manifest::InstallerTypeToString(Manifest::InstallerTypeEnum::Msix));
             }
         }
 
-        // The factory for the predefined installed source.
-        struct Factory : public ISourceFactory
+        struct PredefinedInstalledSourceReference : public ISourceReference
         {
-            std::shared_ptr<ISource> Create(const SourceDetails& details, IProgressCallback& progress) override final
+            PredefinedInstalledSourceReference(const SourceDetails& details) : m_details(details)
+            {
+                m_details.Identifier = "*PredefinedInstalledSource";
+            }
+
+            std::string GetIdentifier() override { return m_details.Identifier; }
+
+            SourceDetails& GetDetails() override { return m_details; };
+
+            std::shared_ptr<ISource> Open(IProgressCallback& progress) override
             {
                 // TODO: Maybe we do need to use it?
                 UNREFERENCED_PARAMETER(progress);
 
-                THROW_HR_IF(E_INVALIDARG, details.Type != PredefinedInstalledSourceFactory::Type());
-
                 // Determine the filter
-                PredefinedInstalledSourceFactory::Filter filter = PredefinedInstalledSourceFactory::StringToFilter(details.Arg);
+                PredefinedInstalledSourceFactory::Filter filter = PredefinedInstalledSourceFactory::StringToFilter(m_details.Arg);
                 AICLI_LOG(Repo, Info, << "Creating PredefinedInstalledSource with filter [" << PredefinedInstalledSourceFactory::FilterToString(filter) << ']');
 
                 // Create an in memory index
@@ -128,7 +133,21 @@ namespace AppInstaller::Repository::Microsoft
                     PopulateIndexFromMSIX(index);
                 }
 
-                return std::make_shared<SQLiteIndexSource>(details, "*PredefinedInstalledSource", std::move(index), Synchronization::CrossProcessReaderWriteLock{}, true);
+                return std::make_shared<SQLiteIndexSource>(m_details, std::move(index), Synchronization::CrossProcessReaderWriteLock{}, true);
+            }
+
+        private:
+            SourceDetails m_details;
+        };
+
+        // The factory for the predefined installed source.
+        struct Factory : public ISourceFactory
+        {
+            std::shared_ptr<ISourceReference> Create(const SourceDetails& details) override final
+            {
+                THROW_HR_IF(E_INVALIDARG, details.Type != PredefinedInstalledSourceFactory::Type());
+
+                return std::make_shared<PredefinedInstalledSourceReference>(details);
             }
 
             bool Add(SourceDetails&, IProgressCallback&) override final

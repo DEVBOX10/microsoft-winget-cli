@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-#pragma once
 #include "pch.h"
 #include "SearchResultsTable.h"
 #include "SQLiteStatementBuilder.h"
@@ -97,7 +96,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
 
         if (bindIndex.empty())
         {
-            AICLI_LOG(Repo, Verbose, << "PackageMatchField not supported in this version: " << PackageMatchFieldToString(filter.Field));
+            AICLI_LOG(Repo, Verbose, << "PackageMatchField not supported in this version: " << ToString(filter.Field));
             return;
         }
 
@@ -162,7 +161,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
 
         if (bindIndex.empty())
         {
-            AICLI_LOG(Repo, Verbose, << "PackageMatchField not supported in this version: " << PackageMatchFieldToString(filter.Field));
+            AICLI_LOG(Repo, Verbose, << "PackageMatchField not supported in this version: " << ToString(filter.Field));
             return;
         }
 
@@ -294,7 +293,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_0
         // TODO: Implement these more complex match types
         if (filter.Type == MatchType::Wildcard || filter.Type == MatchType::Fuzzy || filter.Type == MatchType::FuzzySubstring)
         {
-            AICLI_LOG(Repo, Verbose, << "Specific match type not implemented, skipping: " << MatchTypeToString(filter.Type));
+            AICLI_LOG(Repo, Verbose, << "Specific match type not implemented, skipping: " << ToString(filter.Type));
             return;
         }
 

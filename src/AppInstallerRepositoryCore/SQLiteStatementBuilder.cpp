@@ -1,6 +1,5 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-#pragma once
 #include "pch.h"
 #include "SQLiteStatementBuilder.h"
 
@@ -364,6 +363,19 @@ namespace AppInstaller::Repository::SQLite::Builder
         return *this;
     }
 
+    StatementBuilder& StatementBuilder::In(size_t count)
+    {
+        m_stream << " IN (";
+        for (size_t i = 0; i < count; ++i)
+        {
+            m_stream << (i == 0 ? "?" : ", ?");
+        }
+        m_stream << ')';
+
+        m_bindIndex += static_cast<int>(count);
+        return *this;
+    }
+
     StatementBuilder& StatementBuilder::IsNull(bool isNull)
     {
         m_stream << " IS " << (isNull ? "" : "NOT ") << "NULL";
@@ -379,6 +391,12 @@ namespace AppInstaller::Repository::SQLite::Builder
     StatementBuilder& StatementBuilder::And(const QualifiedColumn& column)
     {
         OutputColumns(m_stream, " AND ", column);
+        return *this;
+    }
+
+    StatementBuilder& StatementBuilder::Or(const QualifiedColumn& column)
+    {
+        OutputColumns(m_stream, " OR ", column);
         return *this;
     }
 
@@ -687,21 +705,21 @@ namespace AppInstaller::Repository::SQLite::Builder
         return *this;
     }
 
-    StatementBuilder& StatementBuilder::DropIndex(std::string_view table)
+    StatementBuilder& StatementBuilder::DropIndex(std::string_view index)
     {
-        OutputOperationAndTable(m_stream, "DROP INDEX", table);
+        OutputOperationAndTable(m_stream, "DROP INDEX", index);
         return *this;
     }
 
-    StatementBuilder& StatementBuilder::DropIndex(QualifiedTable table)
+    StatementBuilder& StatementBuilder::DropIndex(QualifiedTable index)
     {
-        OutputOperationAndTable(m_stream, "DROP INDEX", table);
+        OutputOperationAndTable(m_stream, "DROP INDEX", index);
         return *this;
     }
 
-    StatementBuilder& StatementBuilder::DropIndex(std::initializer_list<std::string_view> table)
+    StatementBuilder& StatementBuilder::DropIndex(std::initializer_list<std::string_view> index)
     {
-        OutputOperationAndTable(m_stream, "DROP INDEX", table);
+        OutputOperationAndTable(m_stream, "DROP INDEX", index);
         return *this;
     }
 

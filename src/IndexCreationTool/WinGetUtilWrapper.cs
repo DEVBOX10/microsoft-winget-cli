@@ -126,7 +126,7 @@ namespace IndexCreationTool
                 Console.WriteLine($"Error to update manifest {manifestPath} with relative path {relativePath}. {Environment.NewLine}{e.ToString()}");
                 throw;
             }
-}
+        }
 
         /// <summary>
         /// Delete manifest from index.
@@ -181,7 +181,7 @@ namespace IndexCreationTool
         {
             if (disposing)
             {
-                if (this.indexHandle != null)
+                if (this.indexHandle != IntPtr.Zero)
                 {
                     WinGetSQLiteIndexClose(this.indexHandle);
                 }

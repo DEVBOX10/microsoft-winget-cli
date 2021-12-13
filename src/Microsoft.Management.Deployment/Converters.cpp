@@ -2,8 +2,7 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include <AppInstallerErrors.h>
-#include <AppInstallerRepositorySearch.h>
-#include <AppInstallerRepositorySource.h>
+#include <winget/RepositorySource.h>
 #include "Microsoft/PredefinedInstalledSourceFactory.h"
 #include "Workflows/WorkflowBase.h"
 #include "Converters.h"
@@ -29,6 +28,12 @@ namespace winrt::Microsoft::Management::Deployment::implementation
             break;
         case ::AppInstaller::Repository::PackageMatchField::Tag:
             matchField = Microsoft::Management::Deployment::PackageMatchField::Tag;
+            break;
+        case ::AppInstaller::Repository::PackageMatchField::ProductCode:
+            matchField = Microsoft::Management::Deployment::PackageMatchField::ProductCode;
+            break;
+        case ::AppInstaller::Repository::PackageMatchField::PackageFamilyName:
+            matchField = Microsoft::Management::Deployment::PackageMatchField::PackageFamilyName;
             break;
         default:
             matchField = Microsoft::Management::Deployment::PackageMatchField::Id;
@@ -56,6 +61,12 @@ namespace winrt::Microsoft::Management::Deployment::implementation
             break;
         case Microsoft::Management::Deployment::PackageMatchField::Tag:
             matchField = ::AppInstaller::Repository::PackageMatchField::Tag;
+            break;
+        case Microsoft::Management::Deployment::PackageMatchField::ProductCode:
+            matchField = ::AppInstaller::Repository::PackageMatchField::ProductCode;
+            break;
+        case Microsoft::Management::Deployment::PackageMatchField::PackageFamilyName:
+            matchField = ::AppInstaller::Repository::PackageMatchField::PackageFamilyName;
             break;
         default:
             matchField = ::AppInstaller::Repository::PackageMatchField::Id;
@@ -266,8 +277,41 @@ namespace winrt::Microsoft::Management::Deployment::implementation
         return resultStatus;
     }
 
-    bool IsLocalPackageCatalog(winrt::Microsoft::Management::Deployment::PackageCatalogInfo info)
+    std::optional<::AppInstaller::Utility::Architecture> GetUtilityArchitecture(winrt::Windows::System::ProcessorArchitecture architecture)
     {
-        return (winrt::to_string(info.Type()).compare(::AppInstaller::Repository::Microsoft::PredefinedInstalledSourceFactory::Type()) == 0);
+        switch (architecture)
+        {
+        case winrt::Windows::System::ProcessorArchitecture::X86:
+            return ::AppInstaller::Utility::Architecture::X86;
+        case winrt::Windows::System::ProcessorArchitecture::Arm:
+            return ::AppInstaller::Utility::Architecture::Arm;
+        case winrt::Windows::System::ProcessorArchitecture::X64:
+            return ::AppInstaller::Utility::Architecture::X64;
+        case winrt::Windows::System::ProcessorArchitecture::Neutral:
+            return ::AppInstaller::Utility::Architecture::Neutral;
+        case winrt::Windows::System::ProcessorArchitecture::Arm64:
+            return ::AppInstaller::Utility::Architecture::Arm64;
+        }
+
+        return {};
+    }
+
+    std::optional<winrt::Windows::System::ProcessorArchitecture> GetWindowsSystemProcessorArchitecture(::AppInstaller::Utility::Architecture architecture)
+    {
+        switch (architecture)
+        {
+        case ::AppInstaller::Utility::Architecture::X86:
+            return winrt::Windows::System::ProcessorArchitecture::X86;
+        case ::AppInstaller::Utility::Architecture::Arm:
+            return winrt::Windows::System::ProcessorArchitecture::Arm;
+        case ::AppInstaller::Utility::Architecture::X64:
+            return winrt::Windows::System::ProcessorArchitecture::X64;
+        case ::AppInstaller::Utility::Architecture::Neutral:
+            return winrt::Windows::System::ProcessorArchitecture::Neutral;
+        case ::AppInstaller::Utility::Architecture::Arm64:
+            return winrt::Windows::System::ProcessorArchitecture::Arm64;
+        }
+
+        return {};
     }
 }

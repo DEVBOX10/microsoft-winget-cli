@@ -49,6 +49,18 @@
     <Filter Include="Microsoft\Schema\1_3">
       <UniqueIdentifier>{15639b2c-ce61-4a18-995a-a73cf1a5817e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Rest\Schema\1_1">
+      <UniqueIdentifier>{9d8095ed-07de-4bc9-bfe7-630b781586d0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rest\Schema\1_1\Json">
+      <UniqueIdentifier>{2cc20cdb-dcb2-4e0e-b04f-e2d838146100}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\winget">
+      <UniqueIdentifier>{aa7315bc-4eb0-4280-9572-f5a25f6e73ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Microsoft\Schema\1_4">
+      <UniqueIdentifier>{dcae9c55-cdd7-4381-8acd-3554896608a5}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -107,12 +119,6 @@
     </ClInclude>
     <ClInclude Include="SQLiteStatementBuilder.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\AppInstallerRepositorySource.h">
-      <Filter>Public</Filter>
-    </ClInclude>
-    <ClInclude Include="Public\AppInstallerRepositorySearch.h">
-      <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="SourceFactory.h">
       <Filter>Header Files</Filter>
@@ -174,9 +180,6 @@
     <ClInclude Include="Rest\Schema\IRestClient.h">
       <Filter>Rest\Schema</Filter>
     </ClInclude>
-    <ClInclude Include="Rest\HttpClientHelper.h">
-      <Filter>Rest</Filter>
-    </ClInclude>
     <ClInclude Include="Rest\RestClient.h">
       <Filter>Rest</Filter>
     </ClInclude>
@@ -188,12 +191,6 @@
     </ClInclude>
     <ClInclude Include="Rest\Schema\RestHelper.h">
       <Filter>Rest\Schema</Filter>
-    </ClInclude>
-    <ClInclude Include="Rest\Schema\1_0\Json\CommonJsonConstants.h">
-      <Filter>Rest\Schema\1_0\Json</Filter>
-    </ClInclude>
-    <ClInclude Include="Rest\Schema\1_0\Json\InformationResponseDeserializer.h">
-      <Filter>Rest\Schema\1_0\Json</Filter>
     </ClInclude>
     <ClInclude Include="Rest\Schema\1_0\Json\ManifestDeserializer.h">
       <Filter>Rest\Schema\1_0\Json</Filter>
@@ -215,6 +212,57 @@
     </ClInclude>
     <ClInclude Include="Microsoft\Schema\1_3\HashVirtualTable.h">
       <Filter>Microsoft\Schema\1_3</Filter>
+    </ClInclude>
+    <ClInclude Include="SourceList.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SourcePolicy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\PredefinedWriteableSourceFactory.h">
+      <Filter>Microsoft</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\InformationResponseDeserializer.h">
+      <Filter>Rest\Schema</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\HttpClientHelper.h">
+      <Filter>Rest\Schema</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_1\Interface.h">
+      <Filter>Rest\Schema\1_1</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_1\Json\ManifestDeserializer.h">
+      <Filter>Rest\Schema\1_1\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="Rest\Schema\1_1\Json\SearchRequestSerializer.h">
+      <Filter>Rest\Schema\1_1\Json</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\ConfigurableTestSourceFactory.h">
+      <Filter>Microsoft</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\winget\PackageTrackingCatalog.h">
+      <Filter>Public\winget</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\winget\RepositorySearch.h">
+      <Filter>Public\winget</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\winget\RepositorySource.h">
+      <Filter>Public\winget</Filter>
+    </ClInclude>
+    <ClInclude Include="ISource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_4\DependenciesTable.h">
+      <Filter>Microsoft\Schema\1_4</Filter>
+    </ClInclude>
+    <ClInclude Include="Microsoft\Schema\1_4\Interface.h">
+      <Filter>Microsoft\Schema\1_4</Filter>
+    </ClInclude>
+    <ClInclude Include="PackageTrackingCatalogSourceFactory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PackageDependenciesValidation.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -293,11 +341,8 @@
     <ClCompile Include="Microsoft\Schema\1_2\SearchResultsTable_1_2.cpp">
       <Filter>Microsoft\Schema\1_2</Filter>
     </ClCompile>
-    <ClCompile Include="Rest\Schema\1_0\Interface.cpp">
+    <ClCompile Include="Rest\Schema\1_0\RestInterface_1_0.cpp">
       <Filter>Rest\Schema\1_0</Filter>
-    </ClCompile>
-    <ClCompile Include="Rest\HttpClientHelper.cpp">
-      <Filter>Rest</Filter>
     </ClCompile>
     <ClCompile Include="Rest\RestClient.cpp">
       <Filter>Rest</Filter>
@@ -311,16 +356,13 @@
     <ClCompile Include="Rest\Schema\RestHelper.cpp">
       <Filter>Rest\Schema</Filter>
     </ClCompile>
-    <ClCompile Include="Rest\Schema\1_0\Json\InformationResponseDeserializer.cpp">
+    <ClCompile Include="Rest\Schema\1_0\Json\ManifestDeserializer_1_0.cpp">
       <Filter>Rest\Schema\1_0\Json</Filter>
     </ClCompile>
-    <ClCompile Include="Rest\Schema\1_0\Json\ManifestDeserializer.cpp">
+    <ClCompile Include="Rest\Schema\1_0\Json\SearchRequestSerializer_1_0.cpp">
       <Filter>Rest\Schema\1_0\Json</Filter>
     </ClCompile>
-    <ClCompile Include="Rest\Schema\1_0\Json\SearchRequestSerializer.cpp">
-      <Filter>Rest\Schema\1_0\Json</Filter>
-    </ClCompile>
-    <ClCompile Include="Rest\Schema\1_0\Json\SearchResponseDeserializer.cpp">
+    <ClCompile Include="Rest\Schema\1_0\Json\SearchResponseDeserializer_1_0.cpp">
       <Filter>Rest\Schema\1_0\Json</Filter>
     </ClCompile>
     <ClCompile Include="Rest\Schema\JsonHelper.cpp">
@@ -328,6 +370,48 @@
     </ClCompile>
     <ClCompile Include="Microsoft\Schema\1_3\Interface_1_3.cpp">
       <Filter>Microsoft\Schema\1_3</Filter>
+    </ClCompile>
+    <ClCompile Include="SourceList.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SourcePolicy.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\InformationResponseDeserializer.cpp">
+      <Filter>Rest\Schema</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\PredefinedWriteableSourceFactory.cpp">
+      <Filter>Microsoft</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\HttpClientHelper.cpp">
+      <Filter>Rest\Schema</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\1_1\RestInterface_1_1.cpp">
+      <Filter>Rest\Schema\1_1</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\1_1\Json\ManifestDeserializer_1_1.cpp">
+      <Filter>Rest\Schema\1_1\Json</Filter>
+    </ClCompile>
+    <ClCompile Include="Rest\Schema\1_1\Json\SearchRequestSerializer_1_1.cpp">
+      <Filter>Rest\Schema\1_1\Json</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\ConfigurableTestSourceFactory.cpp">
+      <Filter>Microsoft</Filter>
+    </ClCompile>
+    <ClCompile Include="PackageTrackingCatalog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RepositorySearch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\Schema\1_4\DependenciesTable.cpp">
+      <Filter>Microsoft\Schema\1_4</Filter>
+    </ClCompile>
+    <ClCompile Include="Microsoft\Schema\1_4\Interface_1_4.cpp">
+      <Filter>Microsoft\Schema\1_4</Filter>
+    </ClCompile>
+    <ClCompile Include="PackageDependenciesValidation.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -52,6 +52,8 @@ namespace AppInstaller::CLI
             Argument::ForType(Args::Type::SourceName).SetRequired(true),
             Argument::ForType(Args::Type::SourceArg),
             Argument::ForType(Args::Type::SourceType),
+            Argument::ForType(Args::Type::CustomHeader),
+            Argument::ForType(Args::Type::AcceptSourceAgreements),
         };
     }
 
@@ -78,6 +80,7 @@ namespace AppInstaller::CLI
             Workflow::EnsureRunningAsAdmin <<
             Workflow::GetSourceList <<
             Workflow::CheckSourceListAgainstAdd <<
+            Workflow::CreateSourceForSourceAdd <<
             Workflow::AddSource;
     }
 

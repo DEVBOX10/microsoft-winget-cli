@@ -7,6 +7,8 @@
 #include "JsonUtil.h"
 #include "winget/Settings.h"
 #include "winget/UserSettings.h"
+
+#include "AppInstallerArchitecture.h"
 #include "winget/Locale.h"
 
 namespace AppInstaller::Settings
@@ -71,7 +73,7 @@ namespace AppInstaller::Settings
 
         std::optional<Json::Value> ParseFile(const StreamDefinition& setting, std::vector<UserSettings::Warning>& warnings)
         {
-            auto stream = GetSettingStream(setting);
+            auto stream = Stream{ setting }.Get();
             if (stream)
             {
                 Json::Value root;
@@ -86,8 +88,8 @@ namespace AppInstaller::Settings
                     return root;
                 }
 
-                AICLI_LOG(Core, Error, << "Error parsing " << setting.Path << ": " << error);
-                warnings.emplace_back(StringResource::String::SettingsWarningParseError, setting.Path, error, false);
+                AICLI_LOG(Core, Error, << "Error parsing " << setting.Name << ": " << error);
+                warnings.emplace_back(StringResource::String::SettingsWarningParseError, setting.Name, error, false);
             }
 
             return {};
@@ -121,12 +123,12 @@ namespace AppInstaller::Settings
                     // Add it to the map
                     settings[S].emplace<details::SettingIndex(S)>(
                         std::forward<typename details::SettingMapping<S>::value_t>(validatedValue.value()));
-                    AICLI_LOG(Core, Info, << "Valid setting from Group Policy. Field: " << path << " Value: " << GetValueString(policyValue.value()));
+                    AICLI_LOG(Core, Verbose, << "Valid setting from Group Policy. Field: " << path << " Value: " << GetValueString(policyValue.value()));
                 }
                 else
                 {
                     auto valueAsString = GetValueString(policyValue.value());
-                    AICLI_LOG(Core, Info, << "Invalid setting from Group Policy. Field: " << path << " Value: " << valueAsString);
+                    AICLI_LOG(Core, Error, << "Invalid setting from Group Policy. Field: " << path << " Value: " << valueAsString);
                     warnings.emplace_back(StringResource::String::SettingsWarningInvalidValueFromPolicy, path, valueAsString);
                 }
 
@@ -148,7 +150,7 @@ namespace AppInstaller::Settings
                         // Finally add it to the map
                         settings[S].emplace<details::SettingIndex(S)>(
                             std::forward<typename details::SettingMapping<S>::value_t>(validatedValue.value()));
-                        AICLI_LOG(Core, Info, << "Valid setting. Field: " << path << " Value: " << GetValueString(jsonValue.value()));
+                        AICLI_LOG(Core, Verbose, << "Valid setting. Field: " << path << " Value: " << GetValueString(jsonValue.value()));
                     }
                     else
                     {
@@ -165,7 +167,7 @@ namespace AppInstaller::Settings
             }
             else
             {
-                AICLI_LOG(Core, Info, << "Setting " << path << " not found. Using default");
+                AICLI_LOG(Core, Verbose, << "Setting " << path << " not found. Using default");
             }
         }
 
@@ -224,9 +226,29 @@ namespace AppInstaller::Settings
 
         WINGET_VALIDATE_PASS_THROUGH(EFExperimentalCmd)
         WINGET_VALIDATE_PASS_THROUGH(EFExperimentalArg)
-        WINGET_VALIDATE_PASS_THROUGH(EFExperimentalMSStore)
+        WINGET_VALIDATE_PASS_THROUGH(EFDependencies)
         WINGET_VALIDATE_PASS_THROUGH(TelemetryDisable)
-        WINGET_VALIDATE_PASS_THROUGH(EFPackagedAPI)
+        WINGET_VALIDATE_PASS_THROUGH(EFDirectMSI)
+        WINGET_VALIDATE_PASS_THROUGH(EnableSelfInitiatedMinidump)
+
+        WINGET_VALIDATE_SIGNATURE(InstallArchitecturePreference)
+        {
+            std::vector<Utility::Architecture> archs;
+            for (auto const& i : value) {
+                Utility::Architecture arch = Utility::ConvertToArchitectureEnum(i);
+                if (Utility::IsApplicableArchitecture(arch) == Utility::InapplicableArchitecture)
+                {
+                    return {};
+                }
+                archs.emplace_back(arch);
+            }
+            return archs;
+        }
+
+        WINGET_VALIDATE_SIGNATURE(InstallArchitectureRequirement)
+        {
+            return SettingMapping<Setting::InstallArchitecturePreference>::Validate(value);
+        }
 
         WINGET_VALIDATE_SIGNATURE(InstallScopePreference)
         {
@@ -305,18 +327,48 @@ namespace AppInstaller::Settings
     }
 #endif
 
+    static std::atomic_bool s_userSettingsInitialized{ false };
+    static std::atomic_bool s_userSettingsInInitialization{ false };
+
     UserSettings const& UserSettings::Instance()
     {
-        static UserSettings userSettings;
-
 #ifndef AICLI_DISABLE_TEST_HOOKS
         if (s_UserSettings_Override)
         {
             return *s_UserSettings_Override;
         }
 #endif
+        if (!s_userSettingsInitialized)
+        {
+            s_userSettingsInInitialization = true;
+        }
+
+        static UserSettings userSettings;
+        s_userSettingsInitialized = true;
+        s_userSettingsInInitialization = false;
 
         return userSettings;
+    }
+
+    const UserSettings* TryGetUser()
+    {
+        if (s_userSettingsInitialized)
+        {
+            return &UserSettings::Instance();
+        }
+
+        // Try to initialize UserSettings, return nullptr if it's already in initialization.
+        if (s_userSettingsInInitialization)
+        {
+            return nullptr;
+        }
+
+        return &UserSettings::Instance();
+    }
+
+    UserSettings const& User()
+    {
+        return UserSettings::Instance();
     }
 
     UserSettings::UserSettings() : m_type(UserSettingsType::Default)
@@ -335,10 +387,10 @@ namespace AppInstaller::Settings
             return;
         }
 
-        auto settingsJson = ParseFile(Streams::PrimaryUserSettings, m_warnings);
+        auto settingsJson = ParseFile(Stream::PrimaryUserSettings, m_warnings);
         if (settingsJson.has_value())
         {
-            AICLI_LOG(Core, Info, << "Settings loaded from " << Streams::PrimaryUserSettings.Path);
+            AICLI_LOG(Core, Info, << "Settings loaded from " << Stream::PrimaryUserSettings.Name);
             m_type = UserSettingsType::Standard;
             settingsRoot = settingsJson.value();
         }
@@ -346,10 +398,10 @@ namespace AppInstaller::Settings
         // Settings didn't parse or doesn't exist, try with backup.
         if (settingsRoot.isNull())
         {
-            auto settingsBackupJson = ParseFile(Streams::BackupUserSettings, m_warnings);
+            auto settingsBackupJson = ParseFile(Stream::BackupUserSettings, m_warnings);
             if (settingsBackupJson.has_value())
             {
-                AICLI_LOG(Core, Info, << "Settings loaded from " << Streams::BackupUserSettings.Path);
+                AICLI_LOG(Core, Info, << "Settings loaded from " << Stream::BackupUserSettings.Name);
                 m_warnings.emplace_back(StringResource::String::SettingsWarningLoadedBackupSettings);
                 m_type = UserSettingsType::Backup;
                 settingsRoot = settingsBackupJson.value();
@@ -372,10 +424,12 @@ namespace AppInstaller::Settings
 
         if (userSettingType == UserSettingsType::Default)
         {
+            Stream primarySettings{ Stream::PrimaryUserSettings };
+
             // Create settings file if it doesn't exist.
-            if (!std::filesystem::exists(UserSettings::SettingsFilePath()))
+            if (!std::filesystem::exists(primarySettings.GetPath()))
             {
-                SetSetting(Streams::PrimaryUserSettings, s_SettingEmpty);
+                std::ignore = primarySettings.Set(s_SettingEmpty);
                 AICLI_LOG(Core, Info, << "Created new settings file");
             }
         }
@@ -383,7 +437,7 @@ namespace AppInstaller::Settings
         {
             // Settings file was loaded correctly, create backup.
             auto from = SettingsFilePath();
-            auto to = GetPathTo(Streams::BackupUserSettings);
+            auto to = Stream{ Stream::BackupUserSettings }.GetPath();
             std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing);
             AICLI_LOG(Core, Info, << "Copied settings to backup file");
         }
@@ -391,6 +445,6 @@ namespace AppInstaller::Settings
 
     std::filesystem::path UserSettings::SettingsFilePath()
     {
-        return GetPathTo(Streams::PrimaryUserSettings);
+        return Stream{ Stream::PrimaryUserSettings }.GetPath();
     }
 }
