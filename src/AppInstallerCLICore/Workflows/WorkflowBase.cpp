@@ -318,7 +318,6 @@ namespace AppInstaller::CLI::Workflow
             return;
         }
 
-        
         context << HandleSourceAgreements(source);
         if (context.IsTerminated())
         {
@@ -990,7 +989,6 @@ namespace AppInstaller::CLI::Workflow
             std::vector<Utility::Architecture> requiredArchitectures = Settings::User().Get<Settings::Setting::InstallArchitectureRequirement>();
             std::vector<Utility::Architecture> optionalArchitectures = Settings::User().Get<Settings::Setting::InstallArchitecturePreference>();
 
-
             if (!requiredArchitectures.empty())
             {
                 context.Add<Execution::Data::AllowedArchitectures>({ requiredArchitectures.begin(), requiredArchitectures.end() });
@@ -999,7 +997,6 @@ namespace AppInstaller::CLI::Workflow
             {
                 optionalArchitectures.emplace_back(Utility::Architecture::Unknown);
                 context.Add<Execution::Data::AllowedArchitectures>({ optionalArchitectures.begin(), optionalArchitectures.end() });
-                
             }
         }
         ManifestComparator manifestComparator(context, installationMetadata);
