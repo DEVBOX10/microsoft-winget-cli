@@ -191,7 +191,12 @@ namespace AppInstaller::CLI::Workflow
         bool hasPackageAgreements = false;
         for (auto& packageContext : context.Get<Execution::Data::PackagesToInstall>())
         {
-            // Show agreements for each package
+            // Show agreements for each package that has one
+            auto agreements = packageContext->Get<Execution::Data::Manifest>().CurrentLocalization.Get<AppInstaller::Manifest::Localization::Agreements>();
+            if (agreements.empty())
+            {
+                continue;
+            }
             Execution::Context& showContext = *packageContext;
             auto previousThreadGlobals = showContext.SetForCurrentThread();
 
@@ -203,7 +208,7 @@ namespace AppInstaller::CLI::Workflow
                 AICLI_TERMINATE_CONTEXT(showContext.GetTerminationHR());
             }
 
-            hasPackageAgreements |= !showContext.Get<Execution::Data::Manifest>().CurrentLocalization.Get<AppInstaller::Manifest::Localization::Agreements>().empty();
+            hasPackageAgreements |= true;
         }
 
         // If any package has agreements, ensure they are accepted
@@ -297,7 +302,7 @@ namespace AppInstaller::CLI::Workflow
         }
         catch (const wil::ResultException& re)
         {
-            context.Add<Execution::Data::InstallerReturnCode>(re.GetErrorCode());
+            context.Add<Execution::Data::OperationReturnCode>(re.GetErrorCode());
             context << ReportInstallerResult("MSIX"sv, re.GetErrorCode(), /* isHResult */ true);
             return;
         }
@@ -314,7 +319,7 @@ namespace AppInstaller::CLI::Workflow
 
     void ReportInstallerResult::operator()(Execution::Context& context) const
     {
-        DWORD installResult = context.Get<Execution::Data::InstallerReturnCode>();
+        DWORD installResult = context.Get<Execution::Data::OperationReturnCode>();
         const auto& additionalSuccessCodes = context.Get<Execution::Data::Installer>()->InstallerSuccessCodes;
         if (installResult != 0 && (std::find(additionalSuccessCodes.begin(), additionalSuccessCodes.end(), installResult) == additionalSuccessCodes.end()))
         {
@@ -538,25 +543,24 @@ namespace AppInstaller::CLI::Workflow
             // Also attempt to find the entry based on the manifest data
             const auto& manifest = context.Get<Execution::Data::Manifest>();
 
-            SearchRequest nameAndPublisherRequest;
+            SearchRequest manifestSearchRequest;
+            AppInstaller::Manifest::Manifest::string_t defaultPublisher;
+            if (manifest.DefaultLocalization.Contains(Localization::Publisher))
+            {
+                defaultPublisher = manifest.DefaultLocalization.Get<Localization::Publisher>();
+            }
 
             // The default localization must contain the name or we cannot do this lookup
             if (manifest.DefaultLocalization.Contains(Localization::PackageName))
             {
                 AppInstaller::Manifest::Manifest::string_t defaultName = manifest.DefaultLocalization.Get<Localization::PackageName>();
-                AppInstaller::Manifest::Manifest::string_t defaultPublisher;
-                if (manifest.DefaultLocalization.Contains(Localization::Publisher))
-                {
-                    defaultPublisher = manifest.DefaultLocalization.Get<Localization::Publisher>();
-                }
-
-                nameAndPublisherRequest.Inclusions.emplace_back(PackageMatchFilter(PackageMatchField::NormalizedNameAndPublisher, MatchType::Exact, defaultName, defaultPublisher));
+                manifestSearchRequest.Inclusions.emplace_back(PackageMatchFilter(PackageMatchField::NormalizedNameAndPublisher, MatchType::Exact, defaultName, defaultPublisher));
 
                 for (const auto& loc : manifest.Localizations)
                 {
                     if (loc.Contains(Localization::PackageName) || loc.Contains(Localization::Publisher))
                     {
-                        nameAndPublisherRequest.Inclusions.emplace_back(PackageMatchFilter(PackageMatchField::NormalizedNameAndPublisher, MatchType::Exact,
+                        manifestSearchRequest.Inclusions.emplace_back(PackageMatchFilter(PackageMatchField::NormalizedNameAndPublisher, MatchType::Exact,
                             loc.Contains(Localization::PackageName) ? loc.Get<Localization::PackageName>() : defaultName,
                             loc.Contains(Localization::Publisher) ? loc.Get<Localization::Publisher>() : defaultPublisher));
                     }
@@ -570,8 +574,18 @@ namespace AppInstaller::CLI::Workflow
                 {
                     if (std::find(productCodes.begin(), productCodes.end(), installer.ProductCode) == productCodes.end())
                     {
-                        nameAndPublisherRequest.Inclusions.emplace_back(PackageMatchFilter(PackageMatchField::ProductCode, MatchType::Exact, installer.ProductCode));
+                        manifestSearchRequest.Inclusions.emplace_back(PackageMatchFilter(PackageMatchField::ProductCode, MatchType::Exact, installer.ProductCode));
                         productCodes.emplace_back(installer.ProductCode);
+                    }
+                }
+
+                for (const auto& appsAndFeaturesEntry : installer.AppsAndFeaturesEntries)
+                {
+                    if (!appsAndFeaturesEntry.DisplayName.empty())
+                    {
+                        manifestSearchRequest.Inclusions.emplace_back(PackageMatchFilter(PackageMatchField::NormalizedNameAndPublisher, MatchType::Exact,
+                            appsAndFeaturesEntry.DisplayName,
+                            appsAndFeaturesEntry.Publisher.empty() ? defaultPublisher : appsAndFeaturesEntry.Publisher));
                     }
                 }
             }
@@ -579,9 +593,9 @@ namespace AppInstaller::CLI::Workflow
             SearchResult findByManifest;
 
             // Don't execute this search if it would just find everything
-            if (!nameAndPublisherRequest.IsForEverything())
+            if (!manifestSearchRequest.IsForEverything())
             {
-                findByManifest = arpSource.Search(nameAndPublisherRequest);
+                findByManifest = arpSource.Search(manifestSearchRequest);
             }
 
             // Cross reference the changes with the search results

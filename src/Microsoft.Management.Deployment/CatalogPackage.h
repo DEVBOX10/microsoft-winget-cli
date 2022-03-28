@@ -13,6 +13,7 @@ namespace winrt::Microsoft::Management::Deployment::implementation
         void Initialize(
             ::AppInstaller::Repository::Source source,
             std::shared_ptr<::AppInstaller::Repository::IPackage> package);
+        std::shared_ptr<::AppInstaller::Repository::IPackage> GetRepositoryPackage();
 #endif
 
         hstring Id();
@@ -22,7 +23,7 @@ namespace winrt::Microsoft::Management::Deployment::implementation
         winrt::Microsoft::Management::Deployment::PackageVersionInfo DefaultInstallVersion();
         winrt::Microsoft::Management::Deployment::PackageVersionInfo GetPackageVersionInfo(winrt::Microsoft::Management::Deployment::PackageVersionId const& versionKey);
         bool IsUpdateAvailable();
-        
+
 #if !defined(INCLUDE_ONLY_INTERFACE_METHODS)
     private:
         ::AppInstaller::Repository::Source m_source;
