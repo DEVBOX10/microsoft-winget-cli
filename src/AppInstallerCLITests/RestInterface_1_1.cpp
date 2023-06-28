@@ -36,7 +36,6 @@ namespace
     {
         utility::string_t GetSampleManifest_AllFields()
         {
-            utility::string_t id = L"Foo.Bar";
             return _XPLATSTR(
                 R"delimiter(
         {
@@ -190,7 +189,7 @@ namespace
         })delimiter");
         }
 
-        void VerifyLocalizations_AllFields(Manifest manifest)
+        void VerifyLocalizations_AllFields(const Manifest& manifest)
         {
             REQUIRE(manifest.DefaultLocalization.Locale == "en-US");
             REQUIRE(manifest.DefaultLocalization.Get<Localization::Publisher>() == "Foo");
@@ -245,7 +244,7 @@ namespace
             REQUIRE(frenchLocalization.Get<Localization::Agreements>().at(0).AgreementUrl == "https://AgreementUrl.net");
         }
 
-        void VerifyInstallers_AllFields(Manifest manifest)
+        void VerifyInstallers_AllFields(const Manifest& manifest)
         {
             REQUIRE(manifest.Installers.size() == 1);
 
@@ -257,7 +256,7 @@ namespace
             REQUIRE(actualInstaller.Platform.size() == 1);
             REQUIRE(actualInstaller.Platform[0] == PlatformEnum::Desktop);
             REQUIRE(actualInstaller.MinOSVersion == "1078");
-            REQUIRE(actualInstaller.InstallerType == InstallerTypeEnum::Msi);
+            REQUIRE(actualInstaller.BaseInstallerType == InstallerTypeEnum::Msi);
             REQUIRE(actualInstaller.Scope == ScopeEnum::User);
             REQUIRE(actualInstaller.InstallModes.size() == 1);
             REQUIRE(actualInstaller.InstallModes.at(0) == InstallModeEnum::Interactive);
@@ -297,7 +296,7 @@ namespace
             REQUIRE(actualInstaller.AppsAndFeaturesEntries.at(0).InstallerType == InstallerTypeEnum::Exe);
             REQUIRE(actualInstaller.Markets.AllowedMarkets.size() == 1);
             REQUIRE(actualInstaller.Markets.AllowedMarkets.at(0) == "US");
-            REQUIRE(actualInstaller.ExpectedReturnCodes.at(3) == ExpectedReturnCodeEnum::InstallInProgress);
+            REQUIRE(actualInstaller.ExpectedReturnCodes.at(3).ReturnResponseEnum == ExpectedReturnCodeEnum::InstallInProgress);
         }
     };
 }
@@ -371,7 +370,7 @@ TEST_CASE("Search_BadRequest_UnsupportedPackageMatchFields", "[RestSource][Inter
               "Publisher": "git",
               "Versions": [
                 {   "PackageVersion": "1.0.0" },
-                {   "PackageVersion": "2.0.0"}]
+                {   "PackageVersion": "2.0.0" }]
             }]
         })delimiter");
 
@@ -394,7 +393,7 @@ TEST_CASE("Search_GoodRequest_OnlyMarketRequired", "[RestSource][Interface_1_1]"
               "Publisher": "git",
               "Versions": [
                 {   "PackageVersion": "1.0.0" },
-                {   "PackageVersion": "2.0.0"}]
+                {   "PackageVersion": "2.0.0" }]
             }]
         })delimiter");
 
@@ -494,7 +493,7 @@ TEST_CASE("GetManifests_GoodRequest_OnlyMarketRequired", "[RestSource][Interface
     REQUIRE(manifest.Installers.size() == 1);
     REQUIRE(manifest.Installers[0].Arch == Architecture::X64);
     REQUIRE(manifest.Installers[0].Sha256 == AppInstaller::Utility::SHA256::ConvertToBytes("011048877dfaef109801b3f3ab2b60afc74f3fc4f7b3430e0c897f5da1df84b6"));
-    REQUIRE(manifest.Installers[0].InstallerType == InstallerTypeEnum::Exe);
+    REQUIRE(manifest.Installers[0].BaseInstallerType == InstallerTypeEnum::Exe);
     REQUIRE(manifest.Installers[0].Url == "https://installer.example.com/foobar.exe");
 }
 
@@ -534,11 +533,11 @@ TEST_CASE("GetManifests_GoodResponse_MSStoreType", "[RestSource][Interface_1_1]"
     // Verify manifest is populated and manifest validation passed
     Manifest manifest = manifests[0];
     REQUIRE(manifest.Installers.size() == 1);
-    REQUIRE(manifest.Installers.at(0).InstallerType == InstallerTypeEnum::MSStore);
+    REQUIRE(manifest.Installers.at(0).BaseInstallerType == InstallerTypeEnum::MSStore);
     REQUIRE(manifest.Installers.at(0).ProductId == "9nblggh4nns1");
 }
 
-TEST_CASE("GetManifests_GoodResponse_V1_1", "[RestSource][Interface_1_0]")
+TEST_CASE("GetManifests_GoodResponse_V1_1", "[RestSource][Interface_1_1]")
 {
     GoodManifest_AllFields sampleManifest;
     utility::string_t sample = sampleManifest.GetSampleManifest_AllFields();
@@ -548,7 +547,7 @@ TEST_CASE("GetManifests_GoodResponse_V1_1", "[RestSource][Interface_1_0]")
     REQUIRE(manifests.size() == 1);
 
     // Verify manifest is populated
-    Manifest manifest = manifests[0];
+    Manifest& manifest = manifests[0];
     REQUIRE(manifest.Id == "Foo.Bar");
     REQUIRE(manifest.Version == "3.0.0abc");
     REQUIRE(manifest.Moniker == "FooBarMoniker");

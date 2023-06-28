@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include "ExecutionReporter.h"
+#include <AppInstallerErrors.h>
 
 
 namespace AppInstaller::CLI::Execution
@@ -17,6 +18,9 @@ namespace AppInstaller::CLI::Execution
     const Sequence& IdEmphasis = TextFormat::Foreground::BrightCyan;
     const Sequence& UrlEmphasis = TextFormat::Foreground::BrightBlue;
     const Sequence& PromptEmphasis = TextFormat::Foreground::Bright;
+    const Sequence& ConvertToUpgradeFlowEmphasis = TextFormat::Foreground::BrightYellow;
+    const Sequence& ConfigurationIntentEmphasis = TextFormat::Foreground::Bright;
+    const Sequence& ConfigurationUnitEmphasis = TextFormat::Foreground::BrightCyan;
 
     Reporter::Reporter(std::ostream& outStream, std::istream& inStream) :
         Reporter(std::make_shared<BaseStream>(outStream, true, ConsoleModeRestore::Instance().IsVTEnabled()), inStream)
@@ -139,6 +143,7 @@ namespace AppInstaller::CLI::Execution
             std::string response;
             if (!std::getline(m_in, response))
             {
+                m_in.get();
                 THROW_HR(APPINSTALLER_CLI_ERROR_PROMPT_INPUT_ERROR);
             }
 
@@ -153,6 +158,39 @@ namespace AppInstaller::CLI::Execution
                 }
             }
         }
+    }
+
+    void Reporter::PromptForEnter(Level level)
+    {
+        auto out = GetOutputStream(level);
+        out << std::endl << Resource::String::PressEnterToContinue << std::endl;
+        m_in.get();
+    }
+
+    std::filesystem::path Reporter::PromptForPath(Resource::LocString message, Level level)
+    {
+        auto out = GetOutputStream(level);
+
+        // Try prompting until we get a valid answer
+        for (;;)
+        {
+            out << message << ' ';
+
+            // Read the response
+            std::string response;
+            if (!std::getline(m_in, response))
+            {
+                THROW_HR(APPINSTALLER_CLI_ERROR_PROMPT_INPUT_ERROR);
+            }
+
+            // Validate the path
+            std::filesystem::path path{ response };
+            if (path.is_absolute())
+            {
+                return path;
+            }
+        }
+
     }
 
     void Reporter::ShowIndefiniteProgress(bool running)
@@ -178,7 +216,20 @@ namespace AppInstaller::CLI::Execution
             m_progressBar->ShowProgress(current, maximum, type);
         }
     }
-    
+
+    void Reporter::SetProgressMessage(std::string_view message)
+    {
+        if (m_spinner)
+        {
+            m_spinner->Message(message);
+        }
+
+        if (m_progressBar)
+        {
+            m_progressBar->Message(message);
+        }
+    }
+
     void Reporter::BeginProgress()
     {
         GetBasicOutputStream() << VirtualTerminal::Cursor::Visibility::DisableShow;
@@ -192,12 +243,54 @@ namespace AppInstaller::CLI::Execution
         {
             m_progressBar->EndProgress(hideProgressWhenDone);
         }
+        SetProgressMessage({});
         GetBasicOutputStream() << VirtualTerminal::Cursor::Visibility::EnableShow;
     };
+
+    Reporter::AsyncProgressScope::AsyncProgressScope(Reporter& reporter, IProgressSink* sink, bool hideProgressWhenDone) :
+        m_reporter(reporter), m_callback(sink)
+    {
+        reporter.SetProgressCallback(&m_callback);
+        sink->BeginProgress();
+        m_hideProgressWhenDone = hideProgressWhenDone;
+    }
+
+    Reporter::AsyncProgressScope::~AsyncProgressScope()
+    {
+        m_reporter.get().SetProgressCallback(nullptr);
+        m_callback.GetSink()->EndProgress(m_hideProgressWhenDone);
+    }
+
+    ProgressCallback& Reporter::AsyncProgressScope::Callback()
+    {
+        return m_callback;
+    }
+
+    IProgressCallback* Reporter::AsyncProgressScope::operator->()
+    {
+        return &m_callback;
+    }
+
+    bool Reporter::AsyncProgressScope::HideProgressWhenDone() const
+    {
+        return m_hideProgressWhenDone;
+    }
+
+    void Reporter::AsyncProgressScope::HideProgressWhenDone(bool value)
+    {
+        m_hideProgressWhenDone.store(value);
+    }
+
+    std::unique_ptr<Reporter::AsyncProgressScope> Reporter::BeginAsyncProgress(bool hideProgressWhenDone)
+    {
+        return std::make_unique<AsyncProgressScope>(*this, m_progressSink.load(), hideProgressWhenDone);
+    }
 
     void Reporter::SetProgressCallback(ProgressCallback* callback)
     {
         auto lock = m_progressCallbackLock.lock_exclusive();
+        // Attempting two progress operations at the same time; not supported.
+        THROW_HR_IF(HRESULT_FROM_WIN32(ERROR_INVALID_STATE), m_progressCallback != nullptr && callback != nullptr);
         m_progressCallback = callback;
     }
 
@@ -209,6 +302,7 @@ namespace AppInstaller::CLI::Execution
         ProgressCallback* callback = m_progressCallback.load();
         if (callback)
         {
+            callback->SetProgressMessage(Resource::String::CancellingOperation());
             callback->Cancel();
         }
     }

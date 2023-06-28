@@ -3,7 +3,7 @@
 #include "pch.h"
 #include "Microsoft/ConfigurableTestSourceFactory.h"
 
-#include <json.h>
+#include <json/json.h>
 
 using namespace std::string_literals;
 using namespace std::string_view_literals;
@@ -111,6 +111,11 @@ namespace AppInstaller::Repository::Microsoft
         // The actual factory implementation.
         struct ConfigurableTestSourceFactoryImpl : public ISourceFactory
         {
+            std::string_view TypeName() const override final
+            {
+                return ConfigurableTestSourceFactory::Type();
+            }
+
             std::shared_ptr<ISourceReference> Create(const SourceDetails& details) override final
             {
                 return std::make_shared<ConfigurableTestSourceReference>(details);

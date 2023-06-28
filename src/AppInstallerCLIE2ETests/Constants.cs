@@ -1,10 +1,19 @@
-﻿// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
+﻿// -----------------------------------------------------------------------------
+// <copyright file="Constants.cs" company="Microsoft Corporation">
+//     Copyright (c) Microsoft Corporation. Licensed under the MIT License.
+// </copyright>
+// -----------------------------------------------------------------------------
 
 namespace AppInstallerCLIE2ETests
 {
+    /// <summary>
+    /// Constants.
+    /// </summary>
     public class Constants
     {
+#pragma warning disable SA1600 // ElementsMustBeDocumented
+#pragma warning disable SA1310 // Field names should not contain underscore
+
         // Runtime test parameters
         public const string PackagedContextParameter = "PackagedContext";
         public const string AICLIPathParameter = "AICLIPath";
@@ -17,6 +26,7 @@ namespace AppInstallerCLIE2ETests
         public const string MsiInstallerPathParameter = "MsiTestInstallerPath";
         public const string MsixInstallerPathParameter = "MsixTestInstallerPath";
         public const string PackageCertificatePathParameter = "PackageCertificatePath";
+        public const string PowerShellModulePathParameter = "PowerShellModulePath";
         public const string AppInstallerTestCert = "AppInstallerTest.cer";
         public const string AppInstallerTestCertThumbprint = "d03e7a688b388b1edde8476a627531c49db88017";
 
@@ -25,8 +35,14 @@ namespace AppInstallerCLIE2ETests
         public const string DefaultWingetSourceUrl = @"https://winget.azureedge.net/cache";
         public const string DefaultMSStoreSourceName = @"msstore";
         public const string DefaultMSStoreSourceUrl = @"https://storeedgefd.dsx.mp.microsoft.com/v9.0";
+        public const string DefaultMSStoreSourceType = "Microsoft.Rest";
+        public const string DefaultMSStoreSourceIdentifier = "StoreEdgeFD";
         public const string TestSourceName = @"TestSource";
+        public const string TestAlternateSourceName = @"TestSource2";
         public const string TestSourceUrl = @"https://localhost:5001/TestKit";
+        public const string TestSourceType = "Microsoft.PreIndexed.Package";
+        public const string TestSourceIdentifier = @"WingetE2E.Tests_8wekyb3d8bbwe";
+        public const string TestSourceServerCertificateFileName = "servercert.cer";
 
         public const string AICLIPackageFamilyName = "WinGetDevCLI_8wekyb3d8bbwe";
         public const string AICLIPackageName = "WinGetDevCLI";
@@ -36,27 +52,70 @@ namespace AppInstallerCLIE2ETests
         public const string ExeInstaller = "AppInstallerTestExeInstaller";
         public const string MsiInstaller = "AppInstallerTestMsiInstaller";
         public const string MsixInstaller = "AppInstallerTestMsixInstaller";
+        public const string ZipInstaller = "AppInstallerTestZipInstaller";
+        public const string ExeInstallerFileName = "AppInstallerTestExeInstaller.exe";
+        public const string MsiInstallerFileName = "AppInstallerTestMsiInstaller.msi";
+        public const string MsixInstallerFileName = "AppInstallerTestMsixInstaller.msix";
+        public const string ZipInstallerFileName = "AppInstallerTestZipInstaller.zip";
         public const string IndexPackage = "source.msix";
         public const string MakeAppx = "makeappx.exe";
         public const string SignTool = "signtool.exe";
         public const string IndexCreationTool = "IndexCreationTool";
         public const string WinGetUtil = "WinGetUtil";
-        public const string E2ETestLogsPath = @"Packages\WinGetDevCLI_8wekyb3d8bbwe\LocalState\DiagOutputDir";
+        public const string E2ETestLogsPathPackaged = @"Packages\WinGetDevCLI_8wekyb3d8bbwe\LocalState\DiagOutputDir";
+        public const string E2ETestLogsPathUnpackaged = @"WinGet\defaultState";
+
+        // Installer filename
+        public const string TestCommandExe = "testCommand.exe";
+        public const string AppInstallerTestExeInstallerExe = "AppInstallerTestExeInstaller.exe";
 
         // Test installers' package IDs
         public const string ExeInstallerPackageId = "AppInstallerTest.TestExeInstaller";
         public const string MsiInstallerPackageId = "AppInstallerTest.TestMsiInstaller";
         public const string MsixInstallerPackageId = "AppInstallerTest.TestMsixInstaller";
+        public const string PortableExePackageId = "AppInstallerTest.TestPortableExe";
+        public const string PortableExeWithCommandPackageId = "AppInstallerTest.TestPortableExeWithCommand";
 
         public const string MsiInstallerProductCode = "{A5D36CF1-1993-4F63-BFB4-3ACD910D36A1}";
+        public const string MsixInstallerName = "6c6338fe-41b7-46ca-8ba6-b5ad5312bb0e";
         public const string MsixInstallerPackageFamilyName = "6c6338fe-41b7-46ca-8ba6-b5ad5312bb0e_8wekyb3d8bbwe";
 
         public const string TestExeInstalledFileName = "TestExeInstalled.txt";
         public const string TestExeUninstallerFileName = "UninstallTestExe.bat";
+        public const string TestExeUninstalledFileName = "TestExeUninstalled.txt";
+
+        // PowerShell Cmdlets
+        public const string FindCmdlet = "Find-WinGetPackage";
+        public const string GetCmdlet = "Get-WinGetPackage";
+        public const string GetSourceCmdlet = "Get-WinGetSource";
+        public const string InstallCmdlet = "Install-WinGetPackage";
+        public const string UninstallCmdlet = "Uninstall-WinGetPackage";
+        public const string UpdateCmdlet = "Update-WinGetPackage";
+
+        public const string WindowsPackageManagerServer = "WindowsPackageManagerServer";
 
         // Locations
         public const string LocalAppData = "LocalAppData";
 
+        // Package dir
+        public const string PortableExePackageDirName = $"{PortableExePackageId}_{TestSourceIdentifier}";
+        public const string PortableExeWithCommandPackageDirName = $"{PortableExeWithCommandPackageId}_{TestSourceIdentifier}";
+
+        // Registry keys
+        public const string WinGetPackageIdentifier = "WinGetPackageIdentifier";
+        public const string WinGetSourceIdentifier = "WinGetSourceIdentifier";
+        public const string UninstallSubKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall";
+        public const string PathSubKey_User = @"Environment";
+        public const string PathSubKey_Machine = @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
+
+        // User settings
+        public const string PortablePackageUserRoot = "portablePackageUserRoot";
+        public const string PortablePackageMachineRoot = "portablePackageMachineRoot";
+        public const string InstallBehaviorScope = "scope";
+
+        /// <summary>
+        /// Error codes.
+        /// </summary>
         public class ErrorCode
         {
             public const int S_OK = 0;
@@ -148,6 +207,30 @@ namespace AppInstallerCLIE2ETests
             public const int ERROR_INVALID_TABLE_COLUMN = unchecked((int)0x8A15004E);
             public const int ERROR_UPGRADE_VERSION_NOT_NEWER = unchecked((int)0x8A15004F);
             public const int ERROR_UPGRADE_VERSION_UNKNOWN = unchecked((int)0x8A150050);
+            public const int ERROR_ICU_CONVERSION_ERROR = unchecked((int)0x8A150051);
+            public const int ERROR_PORTABLE_INSTALL_FAILED = unchecked((int)0x8A150052);
+            public const int ERROR_PORTABLE_REPARSE_POINT_NOT_SUPPORTED = unchecked((int)0x8A150053);
+            public const int ERROR_PORTABLE_PACKAGE_ALREADY_EXISTS = unchecked((int)0x8A150054);
+            public const int ERROR_PORTABLE_SYMLINK_PATH_IS_DIRECTORY = unchecked((int)0x8A150055);
+            public const int ERROR_INSTALLER_PROHIBITS_ELEVATION = unchecked((int)0x8A150056);
+            public const int ERROR_PORTABLE_UNINSTALL_FAILED = unchecked((int)0x8A150057);
+            public const int ERROR_ARP_VERSION_VALIDATION_FAILED = unchecked((int)0x8A150058);
+            public const int ERROR_UNSUPPORTED_ARGUMENT = unchecked((int)0x8A150059);
+            public const int ERROR_BIND_WITH_EMBEDDED_NULL = unchecked((int)0x8A15005A);
+            public const int ERROR_NESTEDINSTALLER_NOT_FOUND = unchecked((int)0x8A15005B);
+            public const int ERROR_EXTRACT_ARCHIVE_FAILED = unchecked((int)0x8A15005C);
+            public const int ERROR_NESTEDINSTALLER_INVALID_PATH = unchecked((int)0x8A15005D);
+            public const int ERROR_PINNED_CERTIFICATE_MISMATCH = unchecked((int)0x8A15005E);
+            public const int ERROR_INSTALL_LOCATION_REQUIRED = unchecked((int)0x8A15005F);
+            public const int ERROR_ARCHIVE_SCAN_FAILED = unchecked((int)0x8A150060);
+            public const int ERROR_PACKAGE_ALREADY_INSTALLED = unchecked((int)0x8A150061);
+            public const int ERROR_PIN_ALREADY_EXISTS = unchecked((int)0x8A150062);
+            public const int ERROR_PIN_DOES_NOT_EXIST = unchecked((int)0x8A150063);
+            public const int ERROR_CANNOT_OPEN_PINNING_INDEX = unchecked((int)0x8A150064);
+            public const int ERROR_MULTIPLE_INSTALL_FAILED = unchecked((int)0x8A150065);
+            public const int ERROR_MULTIPLE_UNINSTALL_FAILED = unchecked((int)0x8A150066);
+            public const int ERROR_NOT_ALL_QUERIES_FOUND_SINGLE = unchecked((int)0x8A150067);
+            public const int ERROR_PACKAGE_IS_PINNED = unchecked((int)0x8A150068);
 
             public const int ERROR_INSTALL_PACKAGE_IN_USE = unchecked((int)0x8A150101);
             public const int ERROR_INSTALL_INSTALL_IN_PROGRESS = unchecked((int)0x8A150102);
@@ -164,6 +247,21 @@ namespace AppInstallerCLIE2ETests
             public const int ERROR_INSTALL_ALREADY_INSTALLED = unchecked((int)0x8A15010D);
             public const int ERROR_INSTALL_DOWNGRADE = unchecked((int)0x8A15010E);
             public const int ERROR_INSTALL_BLOCKED_BY_POLICY = unchecked((int)0x8A15010F);
+            public const int ERROR_INSTALL_DEPENDENCIES = unchecked((int)0x8A150110);
+            public const int ERROR_INSTALL_PACKAGE_IN_USE_BY_APPLICATION = unchecked((int)0x8A150111);
+            public const int ERROR_INSTALL_INVALID_PARAMETER = unchecked((int)0x8A150112);
+            public const int ERROR_INSTALL_SYSTEM_NOT_SUPPORTED = unchecked((int)0x8A150113);
+
+            public const int INSTALLED_STATUS_ARP_ENTRY_NOT_FOUND = unchecked((int)0x8A150201);
+            public const int INSTALLED_STATUS_INSTALL_LOCATION_NOT_APPLICABLE = unchecked((int)0x0A150202);
+            public const int INSTALLED_STATUS_INSTALL_LOCATION_NOT_FOUND = unchecked((int)0x8A150203);
+            public const int INSTALLED_STATUS_FILE_HASH_MISMATCH = unchecked((int)0x8A150204);
+            public const int INSTALLED_STATUS_FILE_NOT_FOUND = unchecked((int)0x8A150205);
+            public const int INSTALLED_STATUS_FILE_FOUND_WITHOUT_HASH_CHECK = unchecked((int)0x0A150206);
+            public const int INSTALLED_STATUS_FILE_ACCESS_ERROR = unchecked((int)0x8A150207);
         }
+
+#pragma warning restore SA1310 // Field names should not contain underscore
+#pragma warning restore SA1600 // ElementsMustBeDocumented
     }
 }

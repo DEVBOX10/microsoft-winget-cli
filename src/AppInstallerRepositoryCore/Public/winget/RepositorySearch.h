@@ -6,6 +6,7 @@
 #include <AppInstallerVersions.h>
 #include <winget/LocIndependent.h>
 #include <winget/Manifest.h>
+#include <winget/Pin.h>
 
 #include <map>
 #include <memory>
@@ -46,6 +47,7 @@ namespace AppInstaller::Repository
         Tag,
         PackageFamilyName,
         ProductCode,
+        UpgradeCode,
         NormalizedNameAndPublisher,
         Market,
         Unknown = 9999
@@ -93,6 +95,17 @@ namespace AppInstaller::Repository
         }
     };
 
+    // The search purpose of the search request.
+    enum class SearchPurpose
+    {
+        // Default search purpose.
+        Default,
+        // The result is used for correlation to an installed package.
+        CorrelationToInstalled,
+        // The result is used for correlation to an available package.
+        CorrelationToAvailable,
+    };
+
     // Container for data used to filter the available manifests in a source.
     // It can be thought of as:
     //  (Query || Inclusions...) && Filters...
@@ -110,6 +123,9 @@ namespace AppInstaller::Repository
 
         // Specific fields used to filter the data further.
         std::vector<PackageMatchFilter> Filters;
+
+        // The search purpose of the search request.
+        SearchPurpose Purpose = SearchPurpose::Default;
 
         // The maximum number of results to return.
         // The default of 0 will place no limit.
@@ -134,6 +150,9 @@ namespace AppInstaller::Repository
         RelativePath,
         // Returned in hexadecimal format
         ManifestSHA256Hash,
+        Publisher,
+        ArpMinVersion,
+        ArpMaxVersion,
     };
 
     // A property of a package version that can have multiple values.
@@ -143,17 +162,20 @@ namespace AppInstaller::Repository
         PackageFamilyName,
         // The product codes associated with the package version.
         ProductCode,
+        // The upgrade codes associated with the package version.
+        UpgradeCode,
         // TODO: Fully implement these 3; the data is not yet in the index source (name and publisher are hacks and locale is not present)
-        // The package names for the version; these must match in number and order with both Publisher and Locale.
+        //       For future usage of these, be aware of the limitations.
+        // The package names for the version; ideally these would match in number and order with both Publisher and Locale.
         Name,
-        // The publisher values for the version; these must match in number and order with both Name and Locale.
+        // The publisher values for the version; ideally these would match in number and order with both Name and Locale.
         Publisher,
-        // The locale of the matching Name and Publisher values; these must match in number and order with both Name and Publisher.
+        // The locale of the matching Name and Publisher values; ideally these would match in number and order with both Name and Publisher.
         // May be empty if there is only a single value for Name and Publisher.
         Locale,
     };
 
-    // A metadata item of a package version.
+    // A metadata item of a package version. These values are persisted and cannot be changed.
     enum class PackageVersionMetadata : int32_t
     {
         // The InstallerType of an installed package
@@ -172,6 +194,15 @@ namespace AppInstaller::Repository
         InstalledLocale,
         // The write time for the given version
         TrackingWriteTime,
+        // The Architecture of an installed package
+        InstalledArchitecture,
+        // The pinned state of the installed package
+        // As a package can have multiple pins for multiple sources, this is the strictest pin
+        PinnedState,
+        // The Architecture of user intent
+        UserIntentArchitecture,
+        // The locale of user intent
+        UserIntentLocale,
     };
 
     // Convert a PackageVersionMetadata to a string.
@@ -206,8 +237,8 @@ namespace AppInstaller::Repository
     {
         PackageVersionKey() = default;
 
-        PackageVersionKey(Utility::NormalizedString sourceId, Utility::NormalizedString version, Utility::NormalizedString channel) :
-            SourceId(std::move(sourceId)), Version(std::move(version)), Channel(std::move(channel)) {}
+        PackageVersionKey(Utility::NormalizedString sourceId, Utility::NormalizedString version, Utility::NormalizedString channel, Pinning::PinType pinnedState = Pinning::PinType::Unknown) :
+            SourceId(std::move(sourceId)), Version(std::move(version)), Channel(std::move(channel)), PinnedState(pinnedState) {}
 
         // The source id that this version came from.
         std::string SourceId;
@@ -217,13 +248,85 @@ namespace AppInstaller::Repository
 
         // The channel.
         Utility::NormalizedString Channel;
+
+        // The pin state for this package version, if it came from a list of available versions.
+        // When used to look up a package version, this field is not considered.
+        Pinning::PinType PinnedState = Pinning::PinType::Unknown;
+
+        bool operator<(const PackageVersionKey& other) const
+        {
+            // Sort using only the version and channel.
+            // The order for the sources depends on the context.
+            return Utility::VersionAndChannel({ Version }, { Channel }) < Utility::VersionAndChannel({ other.Version }, { other.Channel });
+        }
     };
+
 
     // A property of a package.
     enum class PackageProperty
     {
         Id,
         Name,
+    };
+
+    // Defines the installed status check type.
+    enum class InstalledStatusType : uint32_t
+    {
+        // None is checked.
+        None = 0x0,
+        // Check Apps and Features entry.
+        AppsAndFeaturesEntry = 0x0001,
+        // Check Apps and Features entry install location if applicable.
+        AppsAndFeaturesEntryInstallLocation = 0x0002,
+        // Check Apps and Features entry install location with installed files if applicable.
+        AppsAndFeaturesEntryInstallLocationFile = 0x0004,
+        // Check default install location if applicable.
+        DefaultInstallLocation = 0x0008,
+        // Check default install location with installed files if applicable.
+        DefaultInstallLocationFile = 0x0010,
+
+        // Below are helper values for calling CheckInstalledStatus as input.
+        // AppsAndFeaturesEntry related checks
+        AllAppsAndFeaturesEntryChecks = AppsAndFeaturesEntry | AppsAndFeaturesEntryInstallLocation | AppsAndFeaturesEntryInstallLocationFile,
+        // DefaultInstallLocation related checks
+        AllDefaultInstallLocationChecks = DefaultInstallLocation | DefaultInstallLocationFile,
+        // All checks
+        AllChecks = AllAppsAndFeaturesEntryChecks | AllDefaultInstallLocationChecks,
+    };
+
+    DEFINE_ENUM_FLAG_OPERATORS(InstalledStatusType);
+
+    // Struct representing an individual installed status.
+    struct InstalledStatus
+    {
+        // The installed status type.
+        InstalledStatusType Type = InstalledStatusType::None;
+        // The installed status path.
+        Utility::NormalizedString Path;
+        // The installed status result.
+        HRESULT Status;
+
+        InstalledStatus(InstalledStatusType type, Utility::NormalizedString path, HRESULT status) :
+            Type(type), Path(std::move(path)), Status(status) {}
+    };
+
+    // Struct representing installed status from an installer.
+    struct InstallerInstalledStatus
+    {
+        Manifest::ManifestInstaller Installer;
+        std::vector<InstalledStatus> Status;
+    };
+
+    // Possible ways to consider pins when getting a package's available versions
+    enum class PinBehavior
+    {
+        // Ignore pins, returns all available versions.
+        IgnorePins,
+        // Include available versions for packages with a Pinning pin.
+        // Blocking pins and Gating pins still respected.
+        IncludePinned,
+        // Respect all the types of pins.
+        ConsiderPins,
     };
 
     // A package, potentially containing information about it's local state and the available versions.
@@ -237,19 +340,30 @@ namespace AppInstaller::Repository
         // Gets the installed package information.
         virtual std::shared_ptr<IPackageVersion> GetInstalledVersion() const = 0;
 
+        // Note on pins:
+        // Pins only make sense when there is both an installed and an available version.
+        // Only for the composite source will GetAvailableVersionKeys() include pinned state,
+        // and GetLatestAvailableVersion() consider the pin behavior.
+
         // Gets all available versions of this package.
         // The versions will be returned in sorted, descending order.
         //  Ex. { 4, 3, 2, 1 }
-        virtual std::vector<PackageVersionKey> GetAvailableVersionKeys() const = 0;
+        // The list may contain versions from multiple sources.
+        virtual std::vector<PackageVersionKey> GetAvailableVersionKeys(PinBehavior pinBehavior = PinBehavior::ConsiderPins) const = 0;
 
         // Gets a specific version of this package.
-        virtual std::shared_ptr<IPackageVersion> GetLatestAvailableVersion() const = 0;
+        virtual std::shared_ptr<IPackageVersion> GetLatestAvailableVersion(PinBehavior pinBehavior) const = 0;
 
         // Gets a specific version of this package.
         virtual std::shared_ptr<IPackageVersion> GetAvailableVersion(const PackageVersionKey& versionKey) const = 0;
 
+        virtual std::pair<std::shared_ptr<IPackageVersion>, Pinning::PinType> GetAvailableVersionAndPin(const PackageVersionKey& versionKey) const
+        {
+            return { GetAvailableVersion(versionKey), Pinning::PinType::Unknown };
+        }
+
         // Gets a value indicating whether an available version is newer than the installed version.
-        virtual bool IsUpdateAvailable() const = 0;
+        virtual bool IsUpdateAvailable(PinBehavior pinBehavior) const = 0;
 
         // Determines if the given IPackage refers to the same package as this one.
         virtual bool IsSame(const IPackage*) const = 0;
@@ -310,4 +424,7 @@ namespace AppInstaller::Repository
     private:
         mutable std::string m_whatMessage;
     };
+
+    // Checks installed status of a package.
+    std::vector<InstallerInstalledStatus> CheckPackageInstalledStatus(const std::shared_ptr<IPackage>& package, InstalledStatusType checkTypes = InstalledStatusType::AllChecks);
 }

@@ -49,7 +49,8 @@ TEST_CASE("GetSupportedInterface", "[RestSource]")
     Version version{ "1.0.0" };
     REQUIRE(RestClient::GetSupportedInterface(utility::conversions::to_utf8string(TestRestUri), {}, info, version)->GetVersion() == version);
 
-    Version invalid{ "1.2.0" };
+    // Update this test to next version so that we don't forget to add to supported versions before rest e2e tests are available.
+    Version invalid{ "1.6.0" };
     REQUIRE_THROWS(RestClient::GetSupportedInterface(utility::conversions::to_utf8string(TestRestUri), {}, info, invalid));
 }
 
@@ -141,7 +142,7 @@ TEST_CASE("RestClientCreate_UnsupportedVersion", "[RestSource]")
         }})delimiter");
 
     HttpClientHelper helper{ GetTestRestRequestHandler(web::http::status_codes::OK, sample) };
-    REQUIRE_THROWS_HR(RestClient::Create("https://restsource.com/api", {}, std::move(helper)), APPINSTALLER_CLI_ERROR_UNSUPPORTED_RESTSOURCE);
+    REQUIRE_THROWS_HR(RestClient::Create("https://restsource.com/api", {}, {}, std::move(helper)), APPINSTALLER_CLI_ERROR_UNSUPPORTED_RESTSOURCE);
 }
 
 TEST_CASE("RestClientCreate_1.0_Success", "[RestSource]")
@@ -156,7 +157,7 @@ TEST_CASE("RestClientCreate_1.0_Success", "[RestSource]")
         }})delimiter");
 
     HttpClientHelper helper{ GetTestRestRequestHandler(web::http::status_codes::OK, sample) };
-    RestClient client = RestClient::Create(utility::conversions::to_utf8string(TestRestUri), {}, std::move(helper));
+    RestClient client = RestClient::Create(utility::conversions::to_utf8string(TestRestUri), {}, {}, std::move(helper));
     REQUIRE(client.GetSourceIdentifier() == "Source123");
 }
 
@@ -193,7 +194,7 @@ TEST_CASE("RestClientCreate_1.1_Success", "[RestSource]")
         }})delimiter");
 
     HttpClientHelper helper{ GetTestRestRequestHandler(web::http::status_codes::OK, sample) };
-    RestClient client = RestClient::Create(utility::conversions::to_utf8string(TestRestUri), {}, std::move(helper));
+    RestClient client = RestClient::Create(utility::conversions::to_utf8string(TestRestUri), {}, {}, std::move(helper));
     REQUIRE(client.GetSourceIdentifier() == "Source123");
     auto information = client.GetSourceInformation();
     REQUIRE(information.SourceAgreementsIdentifier == "agreementV1");

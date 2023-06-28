@@ -6,10 +6,12 @@
 #include "ManifestComparator.h"
 #include "InstallFlow.h"
 #include "winget\DependenciesGraph.h"
+#include "winget\WindowsFeature.h"
 #include "DependencyNodeProcessor.h"
 
 using namespace AppInstaller::Repository;
 using namespace AppInstaller::Manifest;
+using namespace AppInstaller::WindowsFeature;
 
 namespace AppInstaller::CLI::Workflow
 {
@@ -48,13 +50,13 @@ namespace AppInstaller::CLI::Workflow
             if (dependencies.HasAnyOf(DependencyType::WindowsFeature))
             {
                 info << "  - " << Resource::String::WindowsFeaturesDependencies << std::endl;
-                dependencies.ApplyToType(DependencyType::WindowsFeature, [&info](Dependency dependency) {info << "      " << dependency.Id << std::endl; });
+                dependencies.ApplyToType(DependencyType::WindowsFeature, [&info](Dependency dependency) {info << "      " << dependency.Id() << std::endl; });
             }
 
             if (dependencies.HasAnyOf(DependencyType::WindowsLibrary))
             {
                 info << "  - " << Resource::String::WindowsLibrariesDependencies << std::endl;
-                dependencies.ApplyToType(DependencyType::WindowsLibrary, [&info](Dependency dependency) {info << "      " << dependency.Id << std::endl; });
+                dependencies.ApplyToType(DependencyType::WindowsLibrary, [&info](Dependency dependency) {info << "      " << dependency.Id() << std::endl; });
             }
 
             if (dependencies.HasAnyOf(DependencyType::Package))
@@ -62,7 +64,7 @@ namespace AppInstaller::CLI::Workflow
                 info << "  - " << Resource::String::PackageDependencies << std::endl;
                 dependencies.ApplyToType(DependencyType::Package, [&info](Dependency dependency)
                     {
-                        info << "      " << dependency.Id;
+                        info << "      " << dependency.Id();
                         if (dependency.MinVersion)
                         {
                             info << " [>= " << dependency.MinVersion.value().ToString() << "]";
@@ -74,7 +76,7 @@ namespace AppInstaller::CLI::Workflow
             if (dependencies.HasAnyOf(DependencyType::External))
             {
                 context.Reporter.Warn() << "  - " << Resource::String::ExternalDependencies << std::endl;
-                dependencies.ApplyToType(DependencyType::External, [&info](Dependency dependency) {info << "      " << dependency.Id << std::endl; });
+                dependencies.ApplyToType(DependencyType::External, [&info](Dependency dependency) {info << "      " << dependency.Id() << std::endl; });
             }
         }
     }
@@ -122,14 +124,112 @@ namespace AppInstaller::CLI::Workflow
             const auto& packageVersion = context.Get<Execution::Data::PackageVersion>();
             context.Add<Execution::Data::DependencySource>(packageVersion->GetSource());
             context <<
-                Workflow::OpenCompositeSource(Repository::PredefinedSource::Installed, true);
+                Workflow::OpenCompositeSource(Repository::PredefinedSource::Installed, true, Repository::CompositeSearchBehavior::AvailablePackages);
         }
         else
         {
             // install from manifest requires --dependency-source to be set
             context <<
                 Workflow::OpenSource(true) <<
-                Workflow::OpenCompositeSource(Repository::PredefinedSource::Installed, true);
+                Workflow::OpenCompositeSource(Repository::PredefinedSource::Installed, true, Repository::CompositeSearchBehavior::AvailablePackages);
+        }
+    }
+
+    void EnableWindowsFeaturesDependencies(Execution::Context& context)
+    {
+        if (!Settings::ExperimentalFeature::IsEnabled(Settings::ExperimentalFeature::Feature::WindowsFeature))
+        {
+            return;
+        }
+
+        const auto& rootDependencies = context.Get<Execution::Data::Installer>()->Dependencies;
+
+        if (rootDependencies.Empty())
+        {
+            return;
+        }
+
+        if (rootDependencies.HasAnyOf(DependencyType::WindowsFeature))
+        {
+            context << Workflow::EnsureRunningAsAdmin;
+            if (context.IsTerminated())
+            {
+                return;
+            }
+
+            HRESULT hr = S_OK;
+            std::shared_ptr<DismHelper> dismHelper = std::make_shared<DismHelper>();
+
+            bool force = context.Args.Contains(Execution::Args::Type::Force);
+            bool rebootRequired = false;
+
+            rootDependencies.ApplyToType(DependencyType::WindowsFeature, [&context, &hr, &dismHelper, &force, &rebootRequired](Dependency dependency)
+                {
+                    if (SUCCEEDED(hr) || force)
+                    {
+                        auto featureName = dependency.Id();
+                        WindowsFeature::WindowsFeature windowsFeature = dismHelper->GetWindowsFeature(featureName);
+
+                        if (windowsFeature.DoesExist())
+                        {
+                            if (!windowsFeature.IsEnabled())
+                            {
+                                Utility::LocIndString featureDisplayName = windowsFeature.GetDisplayName();
+                                Utility::LocIndView locIndFeatureName{ featureName };
+
+                                context.Reporter.Info() << Resource::String::EnablingWindowsFeature(featureDisplayName, locIndFeatureName) << std::endl;
+
+                                AICLI_LOG(Core, Info, << "Enabling Windows Feature [" << featureName << "] returned with HRESULT: " << hr);
+                                auto enableFeatureFunction = [&](IProgressCallback& progress)->HRESULT { return windowsFeature.Enable(progress); };
+                                hr = context.Reporter.ExecuteWithProgress(enableFeatureFunction, true);
+
+                                if (FAILED(hr))
+                                {
+                                    AICLI_LOG(Core, Error, << "Failed to enable Windows Feature " << featureDisplayName << " [" << locIndFeatureName << "] with exit code: " << hr);
+                                    context.Reporter.Warn() << Resource::String::FailedToEnableWindowsFeature(featureDisplayName, locIndFeatureName) << std::endl
+                                        << GetUserPresentableMessage(hr) << std::endl;
+                                }
+
+                                if (hr == ERROR_SUCCESS_REBOOT_REQUIRED || windowsFeature.GetRestartRequiredStatus() == DismRestartType::DismRestartRequired)
+                                {
+                                    rebootRequired = true;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Note: If a feature is not found, continue enabling the rest of the dependencies but block immediately after unless force arg is present.
+                            AICLI_LOG(Core, Info, << "Windows Feature [" << featureName << "] does not exist");
+                            hr = APPINSTALLER_CLI_ERROR_INSTALL_MISSING_DEPENDENCY;
+                            context.Reporter.Warn() << Resource::String::WindowsFeatureNotFound(Utility::LocIndView{ featureName }) << std::endl;
+                        }
+                    }
+            });
+
+            if (FAILED(hr))
+            {
+                if (force)
+                {
+                    context.Reporter.Warn() << Resource::String::FailedToEnableWindowsFeatureOverridden << std::endl;
+                }
+                else
+                {
+                    context.Reporter.Error() << Resource::String::FailedToEnableWindowsFeatureOverrideRequired << std::endl;
+                    AICLI_TERMINATE_CONTEXT(hr);
+                }
+            }
+            else if (rebootRequired)
+            {
+                if (force)
+                {
+                    context.Reporter.Warn() << Resource::String::RebootRequiredToEnableWindowsFeatureOverridden << std::endl;
+                }
+                else
+                {
+                    context.Reporter.Error() << Resource::String::RebootRequiredToEnableWindowsFeatureOverrideRequired << std::endl;
+                    AICLI_TERMINATE_CONTEXT(APPINSTALLER_CLI_ERROR_INSTALL_REBOOT_REQUIRED_TO_INSTALL);
+                }
+            }
         }
     }
 
@@ -180,7 +280,7 @@ namespace AppInstaller::CLI::Workflow
                         std::move(nodeProcessor.GetPackageInstalledVersion()),
                         std::move(nodeProcessor.GetManifest()),
                         std::move(nodeProcessor.GetPreferredInstaller()) };
-                    idToPackageMap.emplace(node.Id, std::move(dependencyPackageCandidate));
+                    idToPackageMap.emplace(node.Id(), std::move(dependencyPackageCandidate));
                 };
 
                 return list;
@@ -205,7 +305,7 @@ namespace AppInstaller::CLI::Workflow
 
         for (auto const& node : installationOrder)
         {
-            auto itr = idToPackageMap.find(node.Id);
+            auto itr = idToPackageMap.find(node.Id());
             // if the package was already installed (with a useful version) or is the root
             // then there will be no installer for it on the map.
             if (itr != idToPackageMap.end())
@@ -217,7 +317,7 @@ namespace AppInstaller::CLI::Workflow
                 Logging::Telemetry().LogSelectedInstaller(
                     static_cast<int>(itr->second.Installer.Arch),
                     itr->second.Installer.Url,
-                    Manifest::InstallerTypeToString(itr->second.Installer.InstallerType),
+                    Manifest::InstallerTypeToString(itr->second.Installer.EffectiveInstallerType()),
                     Manifest::ScopeToString(itr->second.Installer.Scope),
                     itr->second.Installer.Locale);
 
@@ -242,7 +342,7 @@ namespace AppInstaller::CLI::Workflow
         }
 
         // Install dependencies in the correct order
-        context.Add<Execution::Data::PackagesToInstall>(std::move(dependencyPackageContexts));
-        context << Workflow::InstallMultiplePackages(m_dependencyReportMessage, APPINSTALLER_CLI_ERROR_INSTALL_DEPENDENCIES, {}, false, true);
+        context.Add<Execution::Data::PackageSubContexts>(std::move(dependencyPackageContexts));
+        context << Workflow::InstallMultiplePackages(m_dependencyReportMessage, APPINSTALLER_CLI_ERROR_INSTALL_DEPENDENCIES, {}, false, true, true, true);
     }
 }

@@ -338,14 +338,22 @@ namespace winrt::Microsoft::Management::Deployment::implementation
                 context->Args.AddArg(Execution::Args::Type::HashOverride);
             }
 
-            // If the PackageInstallScope is anything other than ::Any then set it as a requirement.
-            if (options.PackageInstallScope() == PackageInstallScope::System)
+            if (options.BypassIsStoreClientBlockedPolicyCheck())
             {
-                context->Args.AddArg(Execution::Args::Type::InstallScope, ScopeToString(::AppInstaller::Manifest::ScopeEnum::Machine));
+                context->SetFlags(Execution::ContextFlag::BypassIsStoreClientBlockedPolicyCheck);
             }
-            else if (options.PackageInstallScope() == PackageInstallScope::User)
+
+            if (options.Force())
             {
-                context->Args.AddArg(Execution::Args::Type::InstallScope, ScopeToString(::AppInstaller::Manifest::ScopeEnum::User));
+                context->Args.AddArg(Execution::Args::Type::Force);
+            }
+
+            // If the PackageInstallScope is anything other than ::Any then set it as a requirement.
+            auto manifestScope = GetManifestScope(options.PackageInstallScope());
+            if (manifestScope.first != ::AppInstaller::Manifest::ScopeEnum::Unknown)
+            {
+                context->Args.AddArg(Execution::Args::Type::InstallScope, ScopeToString(manifestScope.first));
+                context->Add<Execution::Data::AllowUnknownScope>(manifestScope.second);
             }
 
             if (options.PackageInstallMode() == PackageInstallMode::Interactive)
@@ -367,6 +375,11 @@ namespace winrt::Microsoft::Management::Deployment::implementation
                 context->Args.AddArg(Execution::Args::Type::Override, ::AppInstaller::Utility::ConvertToUTF8(options.ReplacementInstallerArguments()));
             }
 
+            if (!options.AdditionalInstallerArguments().empty())
+            {
+                context->Args.AddArg(Execution::Args::Type::CustomSwitches, ::AppInstaller::Utility::ConvertToUTF8(options.AdditionalInstallerArguments()));
+            }
+
             if (options.AllowedArchitectures().Size() != 0)
             {
                 std::vector<AppInstaller::Utility::Architecture> allowedArchitectures;
@@ -382,6 +395,21 @@ namespace winrt::Microsoft::Management::Deployment::implementation
             }
 
             // Note: AdditionalPackageCatalogArguments is not needed during install since the manifest is already known so no additional calls to the source are needed. The property is deprecated.
+
+            if (options.AcceptPackageAgreements())
+            {
+                context->Args.AddArg(Execution::Args::Type::AcceptPackageAgreements);
+            }
+
+            if (options.SkipDependencies())
+            {
+                context->Args.AddArg(Execution::Args::Type::SkipDependencies);
+            }
+        }
+        else
+        {
+            // Note: If no install options are specified, we assume the caller is accepting the package agreements by default.
+            context->Args.AddArg(Execution::Args::Type::AcceptPackageAgreements);
         }
     }
 
@@ -396,6 +424,10 @@ namespace winrt::Microsoft::Management::Deployment::implementation
                 context->Args.AddArg(Execution::Args::Type::Log, ::AppInstaller::Utility::ConvertToUTF8(options.LogOutputPath()));
                 context->Args.AddArg(Execution::Args::Type::VerboseLogs);
             }
+            if (options.Force())
+            {
+                context->Args.AddArg(Execution::Args::Type::Force);
+            }
 
             if (options.PackageUninstallMode() == PackageUninstallMode::Interactive)
             {
@@ -404,6 +436,12 @@ namespace winrt::Microsoft::Management::Deployment::implementation
             else if (options.PackageUninstallMode() == PackageUninstallMode::Silent)
             {
                 context->Args.AddArg(Execution::Args::Type::Silent);
+            }
+
+            auto uninstallScope = GetManifestUninstallScope(options.PackageUninstallScope());
+            if (uninstallScope != ::AppInstaller::Manifest::ScopeEnum::Unknown)
+            {
+                context->Args.AddArg(Execution::Args::Type::InstallScope, ScopeToString(uninstallScope));
             }
         }
     }
@@ -415,7 +453,8 @@ namespace winrt::Microsoft::Management::Deployment::implementation
     {
         std::unique_ptr<COMContext> context = std::make_unique<COMContext>();
         hstring correlationData = (options) ? options.CorrelationData() : L"";
-        context->SetContextLoggers(correlationData, ::AppInstaller::Utility::ConvertToUTF8(callerProcessInfoString));
+
+        context->SetContextLoggers(correlationData, GetComCallerName(AppInstaller::Utility::ConvertToUTF8(callerProcessInfoString)));
 
         // Convert the options to arguments for the installer.
         if constexpr (std::is_same_v<TOptions, winrt::Microsoft::Management::Deployment::InstallOptions>)
@@ -528,6 +567,7 @@ namespace winrt::Microsoft::Management::Deployment::implementation
     {
         // Add installed version
         AddInstalledVersionToContext(package.InstalledVersion(), comContext.get());
+
         // Add Package which is used by RecordUninstall later for removing from tracking catalog of correlated available sources as best effort
         winrt::Microsoft::Management::Deployment::implementation::CatalogPackage* catalogPackageImpl = get_self<winrt::Microsoft::Management::Deployment::implementation::CatalogPackage>(package);
         std::shared_ptr<::AppInstaller::Repository::IPackage> internalPackage = catalogPackageImpl->GetRepositoryPackage();

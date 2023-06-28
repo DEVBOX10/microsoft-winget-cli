@@ -57,7 +57,7 @@ namespace AppInstaller::Repository::Rest
                 return {};
             }
 
-            std::vector<PackageVersionKey> GetAvailableVersionKeys() const override
+            std::vector<PackageVersionKey> GetAvailableVersionKeys(PinBehavior) const override
             {
                 std::shared_ptr<const RestSource> source = GetReferenceSource();
                 std::scoped_lock versionsLock{ m_packageVersionsLock };
@@ -72,7 +72,7 @@ namespace AppInstaller::Repository::Rest
                 return result;
             }
 
-            std::shared_ptr<IPackageVersion> GetLatestAvailableVersion() const override
+            std::shared_ptr<IPackageVersion> GetLatestAvailableVersion(PinBehavior) const override
             {
                 std::scoped_lock versionsLock{ m_packageVersionsLock };
                 return GetLatestVersionInternal();
@@ -80,7 +80,7 @@ namespace AppInstaller::Repository::Rest
 
             std::shared_ptr<IPackageVersion> GetAvailableVersion(const PackageVersionKey& versionKey) const override;
 
-            bool IsUpdateAvailable() const override
+            bool IsUpdateAvailable(PinBehavior) const override
             {
                 return false;
             }
@@ -201,8 +201,38 @@ namespace AppInstaller::Repository::Rest
                     return Utility::LocIndString{ m_versionInfo.VersionAndChannel.GetVersion().ToString() };
                 case PackageVersionProperty::Channel:
                     return Utility::LocIndString{ m_versionInfo.VersionAndChannel.GetChannel().ToString() };
+                case PackageVersionProperty::Publisher:
+                    return Utility::LocIndString{ m_package->PackageInfo().Publisher };
+                case PackageVersionProperty::ArpMinVersion:
+                    if (!m_versionInfo.ArpVersions.empty())
+                    {
+                        return Utility::LocIndString{ m_versionInfo.ArpVersions.front().ToString() };
+                    }
+                    else if (m_versionInfo.Manifest)
+                    {
+                        auto arpVersionRange = m_versionInfo.Manifest->GetArpVersionRange();
+                        return arpVersionRange.IsEmpty() ? Utility::LocIndString{} : Utility::LocIndString{ arpVersionRange.GetMinVersion().ToString() };
+                    }
+                    else
+                    {
+                        return {};
+                    }
+                case PackageVersionProperty::ArpMaxVersion:
+                    if (!m_versionInfo.ArpVersions.empty())
+                    {
+                        return Utility::LocIndString{ m_versionInfo.ArpVersions.back().ToString() };
+                    }
+                    else if (m_versionInfo.Manifest)
+                    {
+                        auto arpVersionRange = m_versionInfo.Manifest->GetArpVersionRange();
+                        return arpVersionRange.IsEmpty() ? Utility::LocIndString{} : Utility::LocIndString{ arpVersionRange.GetMaxVersion().ToString() };
+                    }
+                    else
+                    {
+                        return {};
+                    }
                 default:
-                    return Utility::LocIndString{};
+                    return {};
                 }
             }
 
@@ -223,10 +253,19 @@ namespace AppInstaller::Repository::Rest
                         result.emplace_back(Utility::LocIndString{ productCode });
                     }
                     break;
+                case PackageVersionMultiProperty::UpgradeCode:
+                    for (std::string upgradeCode : m_versionInfo.UpgradeCodes)
+                    {
+                        result.emplace_back(Utility::LocIndString{ upgradeCode });
+                    }
+                    break;
                 case PackageVersionMultiProperty::Name:
                     if (m_versionInfo.Manifest)
                     {
-                        BuildPackageVersionMultiPropertyWithFallback<AppInstaller::Manifest::Localization::PackageName>(result);
+                        for (auto name : m_versionInfo.Manifest->GetPackageNames())
+                        {
+                            result.emplace_back(std::move(name));
+                        }
                     }
                     else
                     {
@@ -236,7 +275,10 @@ namespace AppInstaller::Repository::Rest
                 case PackageVersionMultiProperty::Publisher:
                     if (m_versionInfo.Manifest)
                     {
-                        BuildPackageVersionMultiPropertyWithFallback<AppInstaller::Manifest::Localization::Publisher>(result);
+                        for (auto publisher : m_versionInfo.Manifest->GetPublishers())
+                        {
+                            result.emplace_back(std::move(publisher));
+                        }
                     }
                     else
                     {
@@ -298,24 +340,6 @@ namespace AppInstaller::Repository::Rest
             }
 
         private:
-            template<AppInstaller::Manifest::Localization Field>
-            void BuildPackageVersionMultiPropertyWithFallback(std::vector<Utility::LocIndString>& result) const
-            {
-                result.emplace_back(m_versionInfo.Manifest->DefaultLocalization.Get<Field>());
-                for (const auto& loc : m_versionInfo.Manifest->Localizations)
-                {
-                    auto f = loc.Get<Field>();
-                    if (f.empty())
-                    {
-                        result.emplace_back(loc.Get<Field>());
-                    }
-                    else
-                    {
-                        result.emplace_back(std::move(f));
-                    }
-                }
-            }
-
             std::shared_ptr<AvailablePackage> m_package;
             IRestClient::VersionInfo m_versionInfo;
         };

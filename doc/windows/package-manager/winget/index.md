@@ -64,13 +64,14 @@ The current preview of the **winget** tool supports the following commands.
 
 ### Options
 
-The current preview of the **winget** tool supports the following options.
+The current version of the **winget** tool supports the following options.
 
 | Option | Description |
 |--------------|-------------|
 | **-v, --version** | Returns the current version of winget. |
 | **--info** |  Provides you with all detailed information on winget, including the links to the license, privacy statement, and configured group policies. |
 | **-?, --help** |  Shows additional help for winget. |
+| **--wait** | Waits for user input upon command completion. |
 
 ## Supported installer formats
 
@@ -83,6 +84,8 @@ The current version of the **winget** tool supports the following types of insta
 * APPX
 * MSIX
 * BURN
+* PORTABLE
+* ZIP
 
 ## Scripting winget
 
@@ -113,6 +116,6 @@ You can configure the **winget** command line experience by modifying the **sett
 
 The **winget** tool is open source software available on GitHub in the repo [https://github.com/microsoft/winget-cli/](https://github.com/microsoft/winget-cli/). The source for building the client is located in the [src folder](https://github.com/microsoft/winget-cli/tree/master/src).
 
-The source for **winget** is contained in a Visual Studio 2019 C++ solution. To build the solution correctly, install the latest [Visual Studio with the C++ workload](https://visualstudio.microsoft.com/downloads/).
+The source for **winget** is contained in a Visual Studio solution. To build the solution correctly, install the latest [Visual Studio with the C++ workload](https://visualstudio.microsoft.com/downloads/).
 
 We encourage you to contribute to the **winget** source on GitHub. You must first agree to and sign the Microsoft CLA.

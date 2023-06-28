@@ -7,7 +7,7 @@
 #include "TestSource.h"
 #include "TestRestRequestHandler.h"
 #include <Rest/Schema/1_1/Interface.h>
-#include <Rest/Schema/JsonHelper.h>
+#include <winget/JsonUtil.h>
 #include <Rest/RestClient.h>
 #include <winget/Settings.h>
 
@@ -79,9 +79,9 @@ TEST_CASE("RestClient_CustomHeader", "[RestSource][CustomHeader]")
         }})delimiter");
 
     std::optional<std::string> customHeader = "Testing custom header";
-    auto header = std::make_pair<>(CustomHeaderName, JsonHelper::GetUtilityString(customHeader.value()));
+    auto header = std::make_pair<>(CustomHeaderName, JSON::GetUtilityString(customHeader.value()));
     HttpClientHelper helper{ GetCustomHeaderVerificationHandler(web::http::status_codes::OK, sample, header) };
-    RestClient client = RestClient::Create(utility::conversions::to_utf8string("https://restsource.com/api"), customHeader, std::move(helper));
+    RestClient client = RestClient::Create(utility::conversions::to_utf8string("https://restsource.com/api"), customHeader, {}, std::move(helper));
     REQUIRE(client.GetSourceIdentifier() == "Source123");
 }
 
@@ -127,9 +127,44 @@ TEST_CASE("RestSourceSearch_NoCustomHeader", "[RestSource][CustomHeader]")
 TEST_CASE("RestSourceSearch_CustomHeaderExceedingSize", "[RestSource][CustomHeader]")
 {
     std::string customHeader = "This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. This is a custom header that is longer than 1024 characters. ";
-    auto header = std::make_pair<>(CustomHeaderName, JsonHelper::GetUtilityString(customHeader));
+    auto header = std::make_pair<>(CustomHeaderName, JSON::GetUtilityString(customHeader));
     HttpClientHelper helper{ GetCustomHeaderVerificationHandler(web::http::status_codes::OK, sampleSearchResponse, header) };
 
-    REQUIRE_THROWS_HR(RestClient::Create(utility::conversions::to_utf8string("https://restsource.com/api"), customHeader, std::move(helper)),
+    REQUIRE_THROWS_HR(RestClient::Create(utility::conversions::to_utf8string("https://restsource.com/api"), customHeader, {}, std::move(helper)),
         APPINSTALLER_CLI_ERROR_CUSTOMHEADER_EXCEEDS_MAXLENGTH);
+}
+
+TEST_CASE("RestClient_CustomUserAgentHeader", "[RestSource][CustomHeader]")
+{
+    utility::string_t sample = _XPLATSTR(
+        R"delimiter({
+            "Data" : {
+              "SourceIdentifier": "Source123",
+              "ServerSupportedVersions": [
+                "1.0.0",
+                "2.0.0"]
+        }})delimiter");
+
+    std::string testCaller = "TestCaller";
+    auto header = std::make_pair<>(web::http::header_names::user_agent, JSON::GetUtilityString(Runtime::GetUserAgent(testCaller)));
+    HttpClientHelper helper{ GetCustomHeaderVerificationHandler(web::http::status_codes::OK, sample, header) };
+    RestClient client = RestClient::Create(utility::conversions::to_utf8string("https://restsource.com/api"), {}, testCaller, std::move(helper));
+    REQUIRE(client.GetSourceIdentifier() == "Source123");
+}
+
+TEST_CASE("RestClient_DefaultUserAgentHeader", "[RestSource][CustomHeader]")
+{
+    utility::string_t sample = _XPLATSTR(
+        R"delimiter({
+            "Data" : {
+              "SourceIdentifier": "Source123",
+              "ServerSupportedVersions": [
+                "1.0.0",
+                "2.0.0"]
+        }})delimiter");
+
+    auto header = std::make_pair<>(web::http::header_names::user_agent, JSON::GetUtilityString(Runtime::GetDefaultUserAgent()));
+    HttpClientHelper helper{ GetCustomHeaderVerificationHandler(web::http::status_codes::OK, sample, header) };
+    RestClient client = RestClient::Create(utility::conversions::to_utf8string("https://restsource.com/api"), {}, {}, std::move(helper));
+    REQUIRE(client.GetSourceIdentifier() == "Source123");
 }

@@ -39,6 +39,11 @@
 // Also returns the specified value from the current function.
 #define AICLI_TERMINATE_CONTEXT_RETURN(_hr_,_ret_) AICLI_TERMINATE_CONTEXT_ARGS(context,_hr_,_ret_)
 
+namespace AppInstaller::CLI
+{
+    struct Command;
+}
+
 namespace AppInstaller::CLI::Workflow
 {
     struct WorkflowTask;
@@ -54,11 +59,12 @@ namespace AppInstaller::CLI::Execution
         InstallerExecutionUseUpdate = 0x1,
         InstallerHashMatched = 0x2,
         InstallerTrusted = 0x4,
-        AgreementsAcceptedByCaller = 0x8,
         // Allows a failure in a single source to generate a warning rather than an error.
         // TODO: Remove when the source interface is refactored.
-        TreatSourceFailuresAsWarning = 0x10,
-        ShowSearchResultsOnPartialFailure = 0x20,
+        TreatSourceFailuresAsWarning = 0x8,
+        ShowSearchResultsOnPartialFailure = 0x10,
+        DisableInteractivity = 0x40,
+        BypassIsStoreClientBlockedPolicyCheck = 0x80,
     };
 
     DEFINE_ENUM_FLAG_OPERATORS(ContextFlag);
@@ -71,9 +77,9 @@ namespace AppInstaller::CLI::Execution
         Context(std::ostream& out, std::istream& in) : Reporter(out, in) {}
 
         // Constructor for creating a sub-context.
-        Context(Execution::Reporter& reporter, ThreadLocalStorage::ThreadGlobals& threadGlobals) :
+        Context(Execution::Reporter& reporter, ThreadLocalStorage::WingetThreadGlobals& threadGlobals) :
             Reporter(reporter, Execution::Reporter::clone_t{}),
-            m_threadGlobals(threadGlobals, ThreadLocalStorage::ThreadGlobals::create_sub_thread_globals_t{}) {}
+            m_threadGlobals(threadGlobals, ThreadLocalStorage::WingetThreadGlobals::create_sub_thread_globals_t{}) {}
 
         virtual ~Context();
 
@@ -94,6 +100,9 @@ namespace AppInstaller::CLI::Execution
 
         // Returns a value indicating whether the context is terminated.
         bool IsTerminated() const { return m_isTerminated; }
+
+        // Resets the context to a nonterminated state. 
+        void ResetTermination() { m_terminationHR = S_OK; m_isTerminated = false; }
 
         // Gets the HRESULT reason for the termination.
         HRESULT GetTerminationHR() const { return m_terminationHR; }
@@ -130,9 +139,15 @@ namespace AppInstaller::CLI::Execution
         virtual void SetExecutionStage(Workflow::ExecutionStage stage);
 
         // Get Globals for Current Context
-        AppInstaller::ThreadLocalStorage::ThreadGlobals& GetThreadGlobals();
+        AppInstaller::ThreadLocalStorage::WingetThreadGlobals& GetThreadGlobals();
 
         std::unique_ptr<AppInstaller::ThreadLocalStorage::PreviousThreadGlobals> SetForCurrentThread();
+
+        // Gets the executing command
+        AppInstaller::CLI::Command* GetExecutingCommand() { return m_executingCommand; }
+
+        // Sets the executing command
+        void SetExecutingCommand(AppInstaller::CLI::Command* command) { m_executingCommand = command; }
 
 #ifndef AICLI_DISABLE_TEST_HOOKS
         // Enable tests to override behavior
@@ -140,6 +155,9 @@ namespace AppInstaller::CLI::Execution
 #endif
 
     protected:
+        // Copies the args that are also needed in a sub-context. E.g., silent
+        void CopyArgsToSubContext(Context* subContext);
+
         // Neither virtual functions nor member fields can be inside AICLI_DISABLE_TEST_HOOKS
         // or we could have ODR violations that lead to nasty bugs. So we will simply never
         // use this if AICLI_DISABLE_TEST_HOOKS is defined.
@@ -152,6 +170,7 @@ namespace AppInstaller::CLI::Execution
         size_t m_CtrlSignalCount = 0;
         ContextFlag m_flags = ContextFlag::None;
         Workflow::ExecutionStage m_executionStage = Workflow::ExecutionStage::Initial;
-        AppInstaller::ThreadLocalStorage::ThreadGlobals m_threadGlobals;
+        AppInstaller::ThreadLocalStorage::WingetThreadGlobals m_threadGlobals;
+        AppInstaller::CLI::Command* m_executingCommand = nullptr;
     };
 }

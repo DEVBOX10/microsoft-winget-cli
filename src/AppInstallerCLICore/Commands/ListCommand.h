@@ -8,7 +8,7 @@ namespace AppInstaller::CLI
     // Command to get the set of installed packages on the system.
     struct ListCommand final : public Command
     {
-        ListCommand(std::string_view parent) : Command("list", parent) {}
+        ListCommand(std::string_view parent) : Command("list", { "ls" }, parent) {}
 
         std::vector<Argument> GetArguments() const override;
 
@@ -17,7 +17,7 @@ namespace AppInstaller::CLI
 
         void Complete(Execution::Context& context, Execution::Args::Type valueType) const override;
 
-        std::string HelpLink() const override;
+        Utility::LocIndView HelpLink() const override;
 
     protected:
         void ExecuteInternal(Execution::Context& context) const override;

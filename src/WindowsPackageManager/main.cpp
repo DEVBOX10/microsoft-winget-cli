@@ -10,17 +10,21 @@
 #include "WindowsPackageManager.h"
 
 #include <AppInstallerCLICore.h>
+#include <AppInstallerFileLogger.h>
+#include <AppInstallerStrings.h>
+#include <AppInstallerTelemetry.h>
 #include <ComClsids.h>
 
 using namespace winrt::Microsoft::Management::Deployment;
 
-// CreatorMap for out-of-proc com registration
+// CreatorMap for out-of-proc com registration and direct in-proc com class construction
 CoCreatableClassWrlCreatorMapInclude(PackageManager);
 CoCreatableClassWrlCreatorMapInclude(FindPackagesOptions);
 CoCreatableClassWrlCreatorMapInclude(CreateCompositePackageCatalogOptions);
 CoCreatableClassWrlCreatorMapInclude(InstallOptions);
 CoCreatableClassWrlCreatorMapInclude(UninstallOptions);
 CoCreatableClassWrlCreatorMapInclude(PackageMatchFilter);
+CoCreatableClassWrlCreatorMapInclude(PackageManagerSettings);
 
 extern "C"
 {
@@ -57,6 +61,21 @@ extern "C"
     }
     CATCH_RETURN();
 
+    void WINDOWS_PACKAGE_MANAGER_API_CALLING_CONVENTION WindowsPackageManagerServerWilResultLoggingCallback(const wil::FailureInfo& failure) noexcept try
+    {
+        AppInstaller::Logging::Telemetry().LogFailure(failure);
+    }
+    CATCH_LOG();
+
+    WINDOWS_PACKAGE_MANAGER_API WindowsPackageManagerServerCreateInstance(REFCLSID rclsid, REFIID riid, void** out) try
+    {
+        RETURN_HR_IF_NULL(E_POINTER, out);
+        ::Microsoft::WRL::ComPtr<IClassFactory> factory;
+        RETURN_IF_FAILED(::Microsoft::WRL::Module<::Microsoft::WRL::ModuleType::OutOfProc>::GetModule().GetClassObject(rclsid, IID_PPV_ARGS(&factory)));
+        RETURN_HR(factory->CreateInstance(nullptr, riid, out));
+    }
+    CATCH_RETURN();
+
     WINDOWS_PACKAGE_MANAGER_API WindowsPackageManagerInProcModuleInitialize() try
     {
         ::Microsoft::WRL::Module<::Microsoft::WRL::ModuleType::InProc>::Create();
@@ -84,6 +103,12 @@ extern "C"
         CLSID redirectedClsid = GetRedirectedClsidFromInProcClsid(rclsid);
         RETURN_HR_IF(CLASS_E_CLASSNOTAVAILABLE, IsEqualCLSID(redirectedClsid, CLSID_NULL));
         RETURN_HR(::Microsoft::WRL::Module<::Microsoft::WRL::ModuleType::InProc>::GetModule().GetClassObject(redirectedClsid, riid, ppv));
+    }
+    CATCH_RETURN();
+
+    WINDOWS_PACKAGE_MANAGER_API WindowsPackageManagerInProcModuleGetActivationFactory(HSTRING classId, void** factory) try
+    {
+        return WINRT_GetActivationFactory(classId, factory);
     }
     CATCH_RETURN();
 }

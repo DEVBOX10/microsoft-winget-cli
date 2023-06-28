@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include "ShellExecuteInstallerHandler.h"
-#include "AppInstallerFileLogger.h"
+#include <AppInstallerFileLogger.h>
+#include <AppInstallerRuntime.h>
 
 using namespace AppInstaller::CLI;
 using namespace AppInstaller::Utility;
@@ -14,7 +15,7 @@ namespace AppInstaller::CLI::Workflow
     namespace
     {
         // ShellExecutes the given path.
-        std::optional<DWORD> InvokeShellExecute(const std::filesystem::path& filePath, const std::string& args, IProgressCallback& progress)
+        std::optional<DWORD> InvokeShellExecuteEx(const std::filesystem::path& filePath, const std::string& args, bool useRunAs, IProgressCallback& progress)
         {
             AICLI_LOG(CLI, Info, << "Starting: '" << filePath.u8string() << "' with arguments '" << args << '\'');
 
@@ -27,6 +28,13 @@ namespace AppInstaller::CLI::Workflow
             // Some installers force UI. Setting to SW_HIDE will hide installer UI and installation will never complete.
             // Verified setting to SW_SHOW does not hurt silent mode since no UI will be shown.
             execInfo.nShow = SW_SHOW;
+
+            // This installer must be run elevated, but we are not currently.
+            // Have ShellExecute elevate the installer since it won't do so itself.
+            if (useRunAs)
+            {
+                execInfo.lpVerb = L"runas";
+            }
 
             THROW_LAST_ERROR_IF(!ShellExecuteExW(&execInfo) || !execInfo.hProcess);
 
@@ -56,6 +64,11 @@ namespace AppInstaller::CLI::Workflow
                 GetExitCodeProcess(process.get(), &exitCode);
                 return exitCode;
             }
+        }
+
+        std::optional<DWORD> InvokeShellExecute(const std::filesystem::path& filePath, const std::string& args, IProgressCallback& progress)
+        {
+            return InvokeShellExecuteEx(filePath, args, false, progress);
         }
 
         // Gets the escaped installer args.
@@ -106,6 +119,17 @@ namespace AppInstaller::CLI::Workflow
                 installerArgs += ' ' + installerSwitches.at(InstallerSwitchType::Custom);
             }
 
+            // Construct custom arg passed in by cli arg
+            if (context.Args.Contains(Execution::Args::Type::CustomSwitches))
+            {
+                std::string_view customSwitches = context.Args.GetArg(Execution::Args::Type::CustomSwitches);
+                // Since these arguments are appended to the installer at runtime, it doesn't make sense to append them if empty or whitespace
+                if (!Utility::IsEmptyOrWhitespace(customSwitches))
+                {
+                    installerArgs += ' ' + std::string{ customSwitches };
+                }
+            }
+
             // Construct update arg if applicable
             if (isUpdate && installerSwitches.find(InstallerSwitchType::Update) != installerSwitches.end())
             {
@@ -113,8 +137,7 @@ namespace AppInstaller::CLI::Workflow
             }
 
             // Construct install location arg if necessary.
-            if (!isUpdate &&
-                context.Args.Contains(Execution::Args::Type::InstallLocation) &&
+            if (context.Args.Contains(Execution::Args::Type::InstallLocation) &&
                 installerSwitches.find(InstallerSwitchType::InstallLocation) != installerSwitches.end())
             {
                 installerArgs += ' ' + installerSwitches.at(InstallerSwitchType::InstallLocation);
@@ -187,12 +210,25 @@ namespace AppInstaller::CLI::Workflow
     {
         context.Reporter.Info() << Resource::String::InstallFlowStartingPackageInstall << std::endl;
 
+        const auto& installer = context.Get<Execution::Data::Installer>();
         const std::string& installerArgs = context.Get<Execution::Data::InstallerArgs>();
 
+        // Inform of elevation requirements
+        bool isElevated = Runtime::IsRunningAsAdmin();
+
+        // The installer will run elevated, either by direct request or through the installer itself doing so.
+        if ((installer->ElevationRequirement == ElevationRequirementEnum::ElevationRequired ||
+            installer->ElevationRequirement == ElevationRequirementEnum::ElevatesSelf)
+            && !isElevated)
+        {
+            context.Reporter.Warn() << Resource::String::InstallerElevationExpected << std::endl;
+        }
+
         auto installResult = context.Reporter.ExecuteWithProgress(
-            std::bind(InvokeShellExecute,
+            std::bind(InvokeShellExecuteEx,
                 context.Get<Execution::Data::InstallerPath>(),
                 installerArgs,
+                installer->ElevationRequirement == ElevationRequirementEnum::ElevationRequired && !isElevated,
                 std::placeholders::_1));
 
         if (!installResult)
@@ -244,22 +280,9 @@ namespace AppInstaller::CLI::Workflow
             context.Reporter.Warn() << Resource::String::UninstallAbandoned << std::endl;
             AICLI_TERMINATE_CONTEXT(E_ABORT);
         }
-        else if (uninstallResult.value() != 0)
-        {
-            const auto installedPackageVersion = context.Get<Execution::Data::InstalledPackageVersion>();
-            Logging::Telemetry().LogUninstallerFailure(
-                installedPackageVersion->GetProperty(PackageVersionProperty::Id),
-                installedPackageVersion->GetProperty(PackageVersionProperty::Version),
-                "UninstallString",
-                uninstallResult.value());
-
-            context.Add<Execution::Data::OperationReturnCode>(uninstallResult.value());
-            context.Reporter.Error() << Resource::String::UninstallFailedWithCode << ' ' << uninstallResult.value() << std::endl;
-            AICLI_TERMINATE_CONTEXT(APPINSTALLER_CLI_ERROR_EXEC_UNINSTALL_COMMAND_FAILED);
-        }
         else
         {
-            context.Reporter.Info() << Resource::String::UninstallFlowUninstallSuccess << std::endl;
+            context.Add<Execution::Data::OperationReturnCode>(uninstallResult.value());
         }
     }
 
@@ -284,22 +307,11 @@ namespace AppInstaller::CLI::Workflow
                 context.Reporter.Warn() << Resource::String::UninstallAbandoned << std::endl;
                 AICLI_TERMINATE_CONTEXT(E_ABORT);
             }
-            else if (uninstallResult.value() != 0)
+            else
             {
-                // TODO: Check for other success codes
-                const auto installedPackageVersion = context.Get<Execution::Data::InstalledPackageVersion>();
-                Logging::Telemetry().LogUninstallerFailure(
-                    installedPackageVersion->GetProperty(PackageVersionProperty::Id),
-                    installedPackageVersion->GetProperty(PackageVersionProperty::Version),
-                    "MsiExec",
-                    uninstallResult.value());
-
                 context.Add<Execution::Data::OperationReturnCode>(uninstallResult.value());
-                context.Reporter.Error() << Resource::String::UninstallFailedWithCode << ' ' << uninstallResult.value() << std::endl;
-                AICLI_TERMINATE_CONTEXT(APPINSTALLER_CLI_ERROR_EXEC_UNINSTALL_COMMAND_FAILED);
+
             }
         }
-
-        context.Reporter.Info() << Resource::String::UninstallFlowUninstallSuccess << std::endl;
     }
 }

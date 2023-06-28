@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 #pragma once
-#include <Public/winget/RepositorySearch.h>
-#include <Public/winget/PackageTrackingCatalog.h>
+#include <winget/RepositorySearch.h>
+#include <winget/PackageTrackingCatalog.h>
 #include <AppInstallerProgress.h>
+#include <winget/Certificates.h>
 
 #include <chrono>
 #include <filesystem>
@@ -55,7 +56,12 @@ namespace AppInstaller::Repository
     // These sources are not under the direct control of the user, such as packages installed on the system.
     enum class PredefinedSource
     {
+        // Default behavior. Contains ARP packages installed as for user and for machine, MSIX packages for current user.
         Installed,
+        // Only contains packages installed as for user
+        InstalledUser,
+        // Only contains packages installed as for machine
+        InstalledMachine,
         ARP,
         MSIX,
         Installing,
@@ -112,17 +118,26 @@ namespace AppInstaller::Repository
 
         // Whether the source supports InstalledSource correlation.
         bool SupportInstalledSearchCorrelation = true;
+
+        // The configuration of how the server certificate will be validated.
+        Certificates::PinningConfiguration CertificatePinningConfiguration;
+
+        // This value is used as an alternative to the `Arg` value if it is failing to function properly.
+        // The alternate location must point to identical data or inconsistencies may arise.
+        std::string AlternateArg;
     };
 
     // Individual source agreement entry. Label will be highlighted in the display as the key of the agreement entry.
     struct SourceAgreement
     {
-        std::string Label;
-        std::string Text;
-        std::string Url;
+        SourceAgreement() = default;
 
         SourceAgreement(std::string label, std::string text, std::string url) :
             Label(std::move(label)), Text(std::move(text)), Url(std::move(url)) {}
+
+        std::string Label;
+        std::string Text;
+        std::string Url;
     };
 
     // Interface for retrieving information about a source after opening the source.
@@ -200,6 +215,9 @@ namespace AppInstaller::Repository
 
         // Set custom header.
         bool SetCustomHeader(std::optional<std::string> header);
+
+        // Set caller.
+        void SetCaller(std::string caller);
 
         // Execute a search on the source.
         SearchResult Search(const SearchRequest& request) const;

@@ -133,7 +133,7 @@ namespace AppInstaller::Settings
                 return std::nullopt;
             }
 
-            std::vector<Mapping::item_t> items;
+            typename Mapping::value_t items;
             for (const auto& value : listKey->Values())
             {
                 auto item = Mapping::ReadAndValidateItem(value);
@@ -195,6 +195,19 @@ namespace AppInstaller::Settings
             {
                 return std::nullopt;
             }
+
+#ifndef AICLI_DISABLE_TEST_HOOKS
+            // Enable certificate pinning configuration through GP sources for testing
+            const std::string pinningConfigurationName = "CertificatePinning";
+            if (sourceJson.isMember(pinningConfigurationName))
+            {
+                source.PinningConfiguration = Certificates::PinningConfiguration(source.Name);
+                if (!source.PinningConfiguration.LoadFrom(sourceJson[pinningConfigurationName]))
+                {
+                    return std::nullopt;
+                }
+            }
+#endif
 
             return source;
         }
@@ -260,6 +273,8 @@ namespace AppInstaller::Settings
             return TogglePolicy(policy, "EnableLocalManifestFiles"sv, String::PolicyEnableLocalManifests);
         case TogglePolicy::Policy::HashOverride:
             return TogglePolicy(policy, "EnableHashOverride"sv, String::PolicyEnableHashOverride);
+        case TogglePolicy::Policy::LocalArchiveMalwareScanOverride:
+            return TogglePolicy(policy, "EnableLocalArchiveMalwareScanOverride"sv, String::PolicyEnableLocalArchiveMalwareScanOverride);
         case TogglePolicy::Policy::DefaultSource:
             return TogglePolicy(policy, "EnableDefaultSource"sv, String::PolicyEnableDefaultSource);
         case TogglePolicy::Policy::MSStoreSource:
@@ -268,6 +283,8 @@ namespace AppInstaller::Settings
             return TogglePolicy(policy, "EnableAdditionalSources"sv, String::PolicyAdditionalSources);
         case TogglePolicy::Policy::AllowedSources:
             return TogglePolicy(policy, "EnableAllowedSources"sv, String::PolicyAllowedSources);
+        case TogglePolicy::Policy::BypassCertificatePinningForMicrosoftStore:
+            return TogglePolicy(policy, "EnableBypassCertificatePinningForMicrosoftStore"sv, String::PolicyEnableBypassCertificatePinningForMicrosoftStore);
         default:
             THROW_HR(E_UNEXPECTED);
         }

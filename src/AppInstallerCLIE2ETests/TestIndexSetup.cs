@@ -1,12 +1,20 @@
-﻿// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-using System;
-using System.Diagnostics;
-using System.IO;
-using Microsoft.Msix.Utils.ProcessRunner;
+﻿// -----------------------------------------------------------------------------
+// <copyright file="TestIndexSetup.cs" company="Microsoft Corporation">
+//     Copyright (c) Microsoft Corporation. Licensed under the MIT License.
+// </copyright>
+// -----------------------------------------------------------------------------
 
 namespace AppInstallerCLIE2ETests
 {
+    using System;
+    using System.Diagnostics;
+    using System.IO;
+    using System.IO.Compression;
+    using Microsoft.Msix.Utils.ProcessRunner;
+
+    /// <summary>
+    /// Test index setup.
+    /// </summary>
     public class TestIndexSetup
     {
         private const string TestDataName = "TestData";
@@ -20,7 +28,7 @@ namespace AppInstallerCLIE2ETests
         /// 2. Copies and signs installer files (EXE or MSIX)
         /// 3. Hashes installer Files
         /// 4. Replaces manifests with corresponding hash values
-        /// 5. Generates a source package for TestData using makeappx/signtool
+        /// 5. Generates a source package for TestData using makeappx/signtool.
         /// </summary>
         public static void GenerateTestDirectory()
         {
@@ -41,6 +49,8 @@ namespace AppInstallerCLIE2ETests
                 CopyMsixInstallerToTestDirectory();
             }
 
+            CreateZipInstallerInTestDirectory();
+
             TestHashHelper.HashInstallers();
 
             string manifestDirectoryPath = Path.Combine(TestCommon.StaticFileRootPath, ManifestsName);
@@ -49,101 +59,10 @@ namespace AppInstallerCLIE2ETests
             SetupSourcePackage();
         }
 
-        private static void SetupSourcePackage()
-        {
-            string indexDestPath = Path.Combine(TestCommon.StaticFileRootPath, PackageName, PublicName);
-
-            DirectoryInfo parentDir = Directory.GetParent(Directory.GetCurrentDirectory());
-            string indexCreationToolPath = Path.Combine(parentDir.FullName, Constants.IndexCreationTool);
-            string winGetUtilPath = Path.Combine(parentDir.FullName, Constants.WinGetUtil);
-
-            // Copy WingetUtil.dll app extension to IndexCreationTool Path
-            File.Copy(Path.Combine(winGetUtilPath, @"WinGetUtil.dll"), Path.Combine(indexCreationToolPath, @"WinGetUtil.dll"), true);
-
-            try
-            {
-                if (!Directory.Exists(indexDestPath))
-                {
-                   Directory.CreateDirectory(indexDestPath);
-                }
-
-                // Generate Index.db file using IndexCreationTool.exe
-                RunCommand(Path.Combine(indexCreationToolPath, "IndexCreationTool.exe"), $"-d {TestCommon.StaticFileRootPath}", indexDestPath);
-
-                string packageDir = Path.Combine(TestCommon.StaticFileRootPath, PackageName);
-                string indexPackageDestPath = Path.Combine(TestCommon.StaticFileRootPath, Constants.IndexPackage);
-                string pathToSDK = SDKDetector.Instance.LatestSDKBinPath;
-
-                // Package Test Source and Sign With Package Certificate
-                string makeappxExecutable = Path.Combine(pathToSDK, "makeappx.exe");
-                RunCommand(makeappxExecutable, $"pack /nv /v /o /d {packageDir} /p {indexPackageDestPath}");
-                SignFile(indexPackageDestPath);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Failed. Reason: " + e.Message);
-            }
-        }
-
-        private static void CopyExeInstallerToTestDirectory()
-        {
-            // Set Exe Test Installer Path
-            string exeInstallerDestPath = Path.Combine(TestCommon.StaticFileRootPath, Constants.ExeInstaller);
-            DirectoryInfo exeInstallerDestDir = Directory.CreateDirectory(exeInstallerDestPath);
-            string exeInstallerFullName = Path.Combine(exeInstallerDestDir.FullName, "AppInstallerTestExeInstaller.exe");
-
-            // Copy Exe Test Installer to Destination Path
-            File.Copy(TestCommon.ExeInstallerPath, exeInstallerFullName, true);
-            TestCommon.ExeInstallerPath = exeInstallerFullName;
-
-            // Sign EXE Installer File
-            SignFile(TestCommon.ExeInstallerPath);
-        }
-
-        private static void CopyMsiInstallerToTestDirectory()
-        {
-            // Set MSI Test Installer Path
-            string msiInstallerDestPath = Path.Combine(TestCommon.StaticFileRootPath, Constants.MsiInstaller);
-            DirectoryInfo msiInstallerDestDir = Directory.CreateDirectory(msiInstallerDestPath);
-
-            // Copy MSI Test Installer to Destination Path
-            string msiInstallerFullName = Path.Combine(msiInstallerDestDir.FullName, "AppInstallerTestMsiInstaller.msi");
-
-            File.Copy(TestCommon.MsiInstallerPath, msiInstallerFullName, true);
-            TestCommon.MsiInstallerPath = msiInstallerFullName;
-
-            // Sign MSI Installer File
-            SignFile(TestCommon.MsiInstallerPath);
-        }
-
-        private static void CopyMsixInstallerToTestDirectory()
-        {
-            // Set Msix Test Installer Path
-            string msixInstallerDestPath = Path.Combine(TestCommon.StaticFileRootPath, Constants.MsixInstaller);
-            DirectoryInfo msixInstallerDestDir = Directory.CreateDirectory(msixInstallerDestPath);
-
-            // Copy Msix Test Installer to Destination Path
-            string msixInstallerFullName = Path.Combine(msixInstallerDestDir.FullName, "AppInstallerTestMsixInstaller.msix");
-
-            File.Copy(TestCommon.MsixInstallerPath, msixInstallerFullName, true);
-            TestCommon.MsixInstallerPath = msixInstallerFullName;
-
-            // Sign MSIX Installer File
-            SignFile(TestCommon.MsixInstallerPath);
-        }
-
-        private static void SetupLocalTestDirectory(string staticFileRootPath)
-        {
-            DirectoryInfo staticFileRootDir = Directory.CreateDirectory(staticFileRootPath);
-
-            DeleteDirectoryContents(staticFileRootDir);
-
-            string currentDirectory = Environment.CurrentDirectory;
-            string sourcePath = Path.Combine(currentDirectory, TestDataName);
-
-            CopyDirectory(sourcePath, TestCommon.StaticFileRootPath);
-        }
-
+        /// <summary>
+        /// Sign a file using signtool.exe .
+        /// </summary>
+        /// <param name="filePath">File to sign.</param>
         public static void SignFile(string filePath)
         {
             string pathToSDK = SDKDetector.Instance.LatestSDKBinPath;
@@ -152,27 +71,45 @@ namespace AppInstallerCLIE2ETests
         }
 
         /// <summary>
-        /// Deletes the contents of a given directory
+        /// Deletes the contents of a given directory.
         /// </summary>
-        /// <param name="directory"></param>
+        /// <param name="directory">Directory info.</param>
         public static void DeleteDirectoryContents(DirectoryInfo directory)
         {
             foreach (FileInfo file in directory.GetFiles())
             {
-                file.Delete();
+                // Leave the server certificate file if present
+                if (file.Name.ToLower() != Constants.TestSourceServerCertificateFileName)
+                {
+                    try
+                    {
+                        file.Delete();
+                    }
+                    catch
+                    {
+                        // Just ignore errors in this setup step...
+                    }
+                }
             }
 
             foreach (DirectoryInfo dir in directory.GetDirectories())
             {
-                dir.Delete(true);
+                try
+                {
+                    dir.Delete(true);
+                }
+                catch
+                {
+                    // Just ignore errors in this setup step...
+                }
             }
         }
 
         /// <summary>
-        /// Copies the contents of a given directory from a source path to a destination path
+        /// Copies the contents of a given directory from a source path to a destination path.
         /// </summary>
-        /// <param name="sourceDirName"></param>
-        /// <param name="destDirName"></param>
+        /// <param name="sourceDirName">Source directory name.</param>
+        /// <param name="destDirName">Destination directory name.</param>
         public static void CopyDirectory(string sourceDirName, string destDirName)
         {
             DirectoryInfo dir = new DirectoryInfo(sourceDirName);
@@ -197,6 +134,11 @@ namespace AppInstallerCLIE2ETests
             }
         }
 
+        /// <summary>
+        /// Run a command.
+        /// </summary>
+        /// <param name="command">Command.</param>
+        /// <param name="args">Arguments.</param>
         public static void RunCommand(string command, string args)
         {
             Process p = new Process();
@@ -205,13 +147,143 @@ namespace AppInstallerCLIE2ETests
             p.WaitForExit();
         }
 
-        public static void RunCommand (string command, string args, string workingDirectory)
+        /// <summary>
+        /// Run a command from a working directory.
+        /// </summary>
+        /// <param name="command">Command.</param>
+        /// <param name="args">Arguments.</param>
+        /// <param name="workingDirectory">Working directory.</param>
+        public static void RunCommand(string command, string args, string workingDirectory)
         {
             Process p = new Process();
             p.StartInfo = new ProcessStartInfo(command, args);
             p.StartInfo.WorkingDirectory = workingDirectory;
             p.Start();
             p.WaitForExit();
+        }
+
+        private static void SetupSourcePackage()
+        {
+            string indexDestPath = Path.Combine(TestCommon.StaticFileRootPath, PackageName, PublicName);
+
+            DirectoryInfo parentDir = Directory.GetParent(Directory.GetCurrentDirectory());
+            string indexCreationToolPath = Path.Combine(parentDir.FullName, Constants.IndexCreationTool);
+            string winGetUtilPath = Path.Combine(parentDir.FullName, Constants.WinGetUtil);
+
+            // Copy WingetUtil.dll app extension to IndexCreationTool Path
+            File.Copy(Path.Combine(winGetUtilPath, @"WinGetUtil.dll"), Path.Combine(indexCreationToolPath, @"WinGetUtil.dll"), true);
+
+            try
+            {
+                if (!Directory.Exists(indexDestPath))
+                {
+                    Directory.CreateDirectory(indexDestPath);
+                }
+
+                // Generate Index.db file using IndexCreationTool.exe
+                RunCommand(Path.Combine(indexCreationToolPath, "IndexCreationTool.exe"), $"-d {TestCommon.StaticFileRootPath} -i {ManifestsName}", indexDestPath);
+
+                string packageDir = Path.Combine(TestCommon.StaticFileRootPath, PackageName);
+                string indexPackageDestPath = Path.Combine(TestCommon.StaticFileRootPath, Constants.IndexPackage);
+                string pathToSDK = SDKDetector.Instance.LatestSDKBinPath;
+
+                // Package Test Source and Sign With Package Certificate
+                string makeappxExecutable = Path.Combine(pathToSDK, "makeappx.exe");
+                RunCommand(makeappxExecutable, $"pack /nv /v /o /d {packageDir} /p {indexPackageDestPath}");
+                SignFile(indexPackageDestPath);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Failed. Reason: " + e.Message);
+            }
+        }
+
+        private static void CopyExeInstallerToTestDirectory()
+        {
+            // Set Exe Test Installer Path
+            string exeInstallerDestPath = Path.Combine(TestCommon.StaticFileRootPath, Constants.ExeInstaller);
+            DirectoryInfo exeInstallerDestDir = Directory.CreateDirectory(exeInstallerDestPath);
+            string exeInstallerFullName = Path.Combine(exeInstallerDestDir.FullName, Constants.ExeInstallerFileName);
+
+            // Copy Exe Test Installer to Destination Path
+            File.Copy(TestCommon.ExeInstallerPath, exeInstallerFullName, true);
+            TestCommon.ExeInstallerPath = exeInstallerFullName;
+
+            // Sign EXE Installer File
+            SignFile(TestCommon.ExeInstallerPath);
+        }
+
+        private static void CopyMsiInstallerToTestDirectory()
+        {
+            // Set MSI Test Installer Path
+            string msiInstallerDestPath = Path.Combine(TestCommon.StaticFileRootPath, Constants.MsiInstaller);
+            DirectoryInfo msiInstallerDestDir = Directory.CreateDirectory(msiInstallerDestPath);
+
+            // Copy MSI Test Installer to Destination Path
+            string msiInstallerFullName = Path.Combine(msiInstallerDestDir.FullName, Constants.MsiInstallerFileName);
+
+            File.Copy(TestCommon.MsiInstallerPath, msiInstallerFullName, true);
+            TestCommon.MsiInstallerPath = msiInstallerFullName;
+
+            // Sign MSI Installer File
+            SignFile(TestCommon.MsiInstallerPath);
+        }
+
+        private static void CopyMsixInstallerToTestDirectory()
+        {
+            // Set Msix Test Installer Path
+            string msixInstallerDestPath = Path.Combine(TestCommon.StaticFileRootPath, Constants.MsixInstaller);
+            DirectoryInfo msixInstallerDestDir = Directory.CreateDirectory(msixInstallerDestPath);
+
+            // Copy Msix Test Installer to Destination Path
+            string msixInstallerFullName = Path.Combine(msixInstallerDestDir.FullName, Constants.MsixInstallerFileName);
+
+            File.Copy(TestCommon.MsixInstallerPath, msixInstallerFullName, true);
+            TestCommon.MsixInstallerPath = msixInstallerFullName;
+
+            // Sign MSIX Installer File
+            SignFile(TestCommon.MsixInstallerPath);
+        }
+
+        private static void CreateZipInstallerInTestDirectory()
+        {
+            DirectoryInfo zipInstallerDir = Directory.CreateDirectory(Path.Combine(TestCommon.StaticFileRootPath, Constants.ZipInstaller));
+            string zipSourceDirFullPath = Directory.CreateDirectory(TestCommon.GetRandomTestDir()).FullName;
+
+            string exeInstallerSourceDestPath = Path.Combine(zipSourceDirFullPath, Constants.ExeInstallerFileName);
+            string msiInstallerSourceDestPath = Path.Combine(zipSourceDirFullPath, Constants.MsiInstallerFileName);
+            string msixInstallerSourceDestPath = Path.Combine(zipSourceDirFullPath, Constants.MsixInstallerFileName);
+
+            if (File.Exists(TestCommon.ExeInstallerPath))
+            {
+                File.Copy(TestCommon.ExeInstallerPath, exeInstallerSourceDestPath, true);
+            }
+
+            if (File.Exists(TestCommon.MsiInstallerPath))
+            {
+                File.Copy(TestCommon.MsiInstallerPath, msiInstallerSourceDestPath, true);
+            }
+
+            if (File.Exists(TestCommon.MsixInstallerPath))
+            {
+                File.Copy(TestCommon.MsixInstallerPath, msixInstallerSourceDestPath, true);
+            }
+
+            string destArchiveFullPath = Path.Combine(zipInstallerDir.FullName, Constants.ZipInstallerFileName);
+            ZipFile.CreateFromDirectory(zipSourceDirFullPath, destArchiveFullPath);
+            TestCommon.ZipInstallerPath = destArchiveFullPath;
+        }
+
+        private static void SetupLocalTestDirectory(string staticFileRootPath)
+        {
+            DirectoryInfo staticFileRootDir = Directory.CreateDirectory(staticFileRootPath);
+
+            DeleteDirectoryContents(staticFileRootDir);
+
+            string currentDirectory = Environment.CurrentDirectory;
+            string sourcePath = Path.Combine(currentDirectory, TestDataName);
+
+            CopyDirectory(sourcePath, TestCommon.StaticFileRootPath);
         }
     }
 }

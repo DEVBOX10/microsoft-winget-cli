@@ -2,17 +2,23 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include "UninstallFlow.h"
+#include "InstallFlow.h"
 #include "WorkflowBase.h"
 #include "DependenciesFlow.h"
 #include "ShellExecuteInstallerHandler.h"
 #include "AppInstallerMsixInfo.h"
-
+#include "PortableFlow.h"
 #include <AppInstallerDeployment.h>
+#include <AppInstallerSynchronization.h>
+#include <winget/Runtime.h>
 
 using namespace AppInstaller::CLI::Execution;
 using namespace AppInstaller::Manifest;
 using namespace AppInstaller::Msix;
 using namespace AppInstaller::Repository;
+using namespace AppInstaller::Registry;
+using namespace AppInstaller::CLI::Portable;
+using namespace AppInstaller::Utility::literals;
 
 namespace AppInstaller::CLI::Workflow
 {
@@ -56,6 +62,7 @@ namespace AppInstaller::CLI::Workflow
     {
         context <<
             Workflow::GetInstalledPackageVersion <<
+            Workflow::EnsureSupportForUninstall <<
             Workflow::GetUninstallInfo <<
             Workflow::GetDependenciesInfoForUninstall <<
             Workflow::ReportDependencies(Resource::String::UninstallCommandReportDependencies) <<
@@ -63,6 +70,54 @@ namespace AppInstaller::CLI::Workflow
             Workflow::ExecuteUninstaller <<
             Workflow::ReportExecutionStage(ExecutionStage::PostExecution) <<
             Workflow::RecordUninstall;
+    }
+
+    void UninstallMultiplePackages(Execution::Context& context)
+    {
+        bool allSucceeded = true;
+        size_t packagesCount = context.Get<Execution::Data::PackageSubContexts>().size();
+        size_t packagesProgress = 0;
+
+        for (auto& packageContext : context.Get<Execution::Data::PackageSubContexts>())
+        {
+            packagesProgress++;
+            context.Reporter.Info() << '(' << packagesProgress << '/' << packagesCount << ") "_liv;
+
+            // We want to do best effort to uninstall all packages regardless of previous failures
+            Execution::Context& uninstallContext = *packageContext;
+            auto previousThreadGlobals = uninstallContext.SetForCurrentThread();
+
+            // Prevent individual exceptions from breaking out of the loop
+            try
+            {
+                uninstallContext <<
+                    Workflow::ReportPackageIdentity <<
+                    Workflow::UninstallSinglePackage;
+            }
+            catch (...)
+            {
+                uninstallContext.SetTerminationHR(Workflow::HandleException(uninstallContext, std::current_exception()));
+            }
+
+            uninstallContext.Reporter.Info() << std::endl;
+
+            if (uninstallContext.IsTerminated())
+            {
+                if (context.IsTerminated() && context.GetTerminationHR() == E_ABORT)
+                {
+                    // This means that the subcontext being terminated is due to an overall abort
+                    context.Reporter.Info() << Resource::String::Cancelled << std::endl;
+                    return;
+                }
+
+                allSucceeded = false;
+            }
+        }
+
+        if (!allSucceeded)
+        {
+            AICLI_TERMINATE_CONTEXT(APPINSTALLER_CLI_ERROR_MULTIPLE_UNINSTALL_FAILED);
+        }
     }
 
     void GetUninstallInfo(Execution::Context& context)
@@ -126,6 +181,25 @@ namespace AppInstaller::CLI::Workflow
             context.Add<Execution::Data::PackageFamilyNames>(packageFamilyNames);
             break;
         }
+        case InstallerTypeEnum::Portable:
+        {
+            auto productCodes = installedPackageVersion->GetMultiProperty(PackageVersionMultiProperty::ProductCode);
+            if (productCodes.empty())
+            {
+                context.Reporter.Error() << Resource::String::NoUninstallInfoFound << std::endl;
+                AICLI_TERMINATE_CONTEXT(APPINSTALLER_CLI_ERROR_NO_UNINSTALL_INFO_FOUND);
+            }
+
+            const std::string installedScope = context.Get<Execution::Data::InstalledPackageVersion>()->GetMetadata()[Repository::PackageVersionMetadata::InstalledScope];
+            const std::string installedArch = context.Get<Execution::Data::InstalledPackageVersion>()->GetMetadata()[Repository::PackageVersionMetadata::InstalledArchitecture];
+            
+            PortableInstaller portableInstaller = PortableInstaller(
+                Manifest::ConvertToScopeEnum(installedScope),
+                Utility::ConvertToArchitectureEnum(installedArch),
+                productCodes[0]);
+            context.Add<Execution::Data::PortableInstaller>(std::move(portableInstaller));
+            break;
+        }
         default:
             THROW_HR(HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED));
         }
@@ -134,21 +208,47 @@ namespace AppInstaller::CLI::Workflow
     void ExecuteUninstaller(Execution::Context& context)
     {
         const std::string installedTypeString = context.Get<Execution::Data::InstalledPackageVersion>()->GetMetadata()[PackageVersionMetadata::InstalledType];
-        switch (ConvertToInstallerTypeEnum(installedTypeString))
+        InstallerTypeEnum installerType = ConvertToInstallerTypeEnum(installedTypeString);
+
+        Synchronization::CrossProcessInstallLock lock;
+        if (!ExemptFromSingleInstallLocking(installerType))
+        {
+            // Acquire install lock; if the operation is cancelled it will return false so we will also return.
+            if (!context.Reporter.ExecuteWithProgress([&](IProgressCallback& callback)
+                {
+                    callback.SetProgressMessage(Resource::String::InstallWaitingOnAnother());
+                    return lock.Acquire(callback);
+                }))
+            {
+                AICLI_LOG(CLI, Info, << "Abandoning attempt to acquire install lock due to cancellation");
+                return;
+            }
+        }
+
+        switch (installerType)
         {
         case InstallerTypeEnum::Exe:
         case InstallerTypeEnum::Burn:
         case InstallerTypeEnum::Inno:
         case InstallerTypeEnum::Nullsoft:
-            context << Workflow::ShellExecuteUninstallImpl;
+            context <<
+                Workflow::ShellExecuteUninstallImpl <<
+                ReportUninstallerResult("UninstallString", APPINSTALLER_CLI_ERROR_EXEC_UNINSTALL_COMMAND_FAILED);
             break;
         case InstallerTypeEnum::Msi:
         case InstallerTypeEnum::Wix:
-            context << Workflow::ShellExecuteMsiExecUninstall;
+            context <<
+                Workflow::ShellExecuteMsiExecUninstall <<
+                ReportUninstallerResult("MsiExec", APPINSTALLER_CLI_ERROR_EXEC_UNINSTALL_COMMAND_FAILED);
             break;
         case InstallerTypeEnum::Msix:
         case InstallerTypeEnum::MSStore:
             context << Workflow::MsixUninstall;
+            break;
+        case InstallerTypeEnum::Portable:
+            context <<
+                Workflow::PortableUninstallImpl <<
+                ReportUninstallerResult("PortableUninstall"sv, APPINSTALLER_CLI_ERROR_PORTABLE_UNINSTALL_FAILED, true);
             break;
         default:
         THROW_HR(HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED));
@@ -157,6 +257,18 @@ namespace AppInstaller::CLI::Workflow
 
     void MsixUninstall(Execution::Context& context)
     {
+        bool isMachineScope = Manifest::ConvertToScopeEnum(context.Args.GetArg(Execution::Args::Type::InstallScope)) == Manifest::ScopeEnum::Machine;
+
+        // TODO: There was a bug in deployment api if deprovision api was called in packaged context.
+        // Remove this check when the OS bug is fixed and back ported.
+        if (isMachineScope && Runtime::IsRunningInPackagedContext())
+        {
+            context.Reporter.Error() << Resource::String::InstallFlowReturnCodeSystemNotSupported << std::endl;
+            context.Add<Execution::Data::OperationReturnCode>(static_cast<DWORD>(APPINSTALLER_CLI_ERROR_INSTALL_SYSTEM_NOT_SUPPORTED));
+            AICLI_LOG(CLI, Error, << "Device wide uninstall for msix type is not supported in packaged context.");
+            AICLI_TERMINATE_CONTEXT(APPINSTALLER_CLI_ERROR_INSTALL_SYSTEM_NOT_SUPPORTED);
+        }
+
         const auto& packageFamilyNames = context.Get<Execution::Data::PackageFamilyNames>();
         context.Reporter.Info() << Resource::String::UninstallFlowStartingPackageUninstall << std::endl;
 
@@ -172,13 +284,20 @@ namespace AppInstaller::CLI::Workflow
             AICLI_LOG(CLI, Info, << "Removing MSIX package: " << packageFullName.value());
             try
             {
-                context.Reporter.ExecuteWithProgress(std::bind(Deployment::RemovePackage, packageFullName.value(), std::placeholders::_1));
+                if (isMachineScope)
+                {
+                    context.Reporter.ExecuteWithProgress(std::bind(Deployment::RemovePackageMachineScope, packageFamilyName, packageFullName.value(), std::placeholders::_1));
+                }
+                else
+                {
+                    context.Reporter.ExecuteWithProgress(std::bind(Deployment::RemovePackage, packageFullName.value(), winrt::Windows::Management::Deployment::RemovalOptions::None, std::placeholders::_1));
+                }
             }
             catch (const wil::ResultException& re)
             {
                 context.Add<Execution::Data::OperationReturnCode>(re.GetErrorCode());
-                context.Reporter.Error() << Resource::String::UninstallFailedWithCode << ' ' << re.GetErrorCode() << std::endl;
-                AICLI_TERMINATE_CONTEXT(APPINSTALLER_CLI_ERROR_EXEC_UNINSTALL_COMMAND_FAILED);
+                context << ReportUninstallerResult("MSIXUninstall"sv, re.GetErrorCode(), /* isHResult */ true);
+                return;
             }
         }
 
@@ -205,6 +324,68 @@ namespace AppInstaller::CLI::Workflow
         {
             auto trackingCatalog = item.FromSource.GetTrackingCatalog();
             trackingCatalog.RecordUninstall(item.Identifier);
+        }
+    }
+
+    void ReportUninstallerResult::operator()(Execution::Context& context) const
+    {
+        DWORD uninstallResult = context.Get<Execution::Data::OperationReturnCode>();
+        if (uninstallResult != 0)
+        {
+            const auto installedPackageVersion = context.Get<Execution::Data::InstalledPackageVersion>();
+            Logging::Telemetry().LogUninstallerFailure(
+                installedPackageVersion->GetProperty(PackageVersionProperty::Id),
+                installedPackageVersion->GetProperty(PackageVersionProperty::Version),
+                m_uninstallerType,
+                uninstallResult);
+
+            if (m_isHResult)
+            {
+                context.Reporter.Error()
+                    << Resource::String::UninstallFailedWithCode(Utility::LocIndView{ GetUserPresentableMessage(uninstallResult) })
+                    << std::endl;
+            }
+            else
+            {
+                context.Reporter.Error()
+                    << Resource::String::UninstallFailedWithCode(uninstallResult)
+                    << std::endl;
+            }
+
+            // Show installer log path if exists
+            if (context.Contains(Execution::Data::LogPath) && std::filesystem::exists(context.Get<Execution::Data::LogPath>()))
+            {
+                auto installerLogPath = Utility::LocIndString{ context.Get<Execution::Data::LogPath>().u8string() };
+                context.Reporter.Info() << Resource::String::InstallerLogAvailable(installerLogPath) << std::endl;
+            }
+
+            AICLI_TERMINATE_CONTEXT(m_hr);
+        }
+        else
+        {
+            context.Reporter.Info() << Resource::String::UninstallFlowUninstallSuccess << std::endl;
+        }
+    }
+
+    void EnsureSupportForUninstall(Execution::Context& context)
+    {
+        auto installedPackageVersion = context.Get<Execution::Data::InstalledPackageVersion>();
+        const std::string installedTypeString = installedPackageVersion->GetMetadata()[PackageVersionMetadata::InstalledType];
+        auto installedType = ConvertToInstallerTypeEnum(installedTypeString);
+        if (installedType == InstallerTypeEnum::Portable)
+        {
+            const std::string installedScope = installedPackageVersion->GetMetadata()[Repository::PackageVersionMetadata::InstalledScope];
+            if (Manifest::ConvertToScopeEnum(installedScope) == Manifest::ScopeEnum::Machine)
+            {
+                context << EnsureRunningAsAdmin;
+            }
+        }
+        else if (installedType == InstallerTypeEnum::Msix)
+        {
+            if (Manifest::ConvertToScopeEnum(context.Args.GetArg(Execution::Args::Type::InstallScope)) == Manifest::ScopeEnum::Machine)
+            {
+                context << EnsureRunningAsAdmin;
+            }
         }
     }
 }

@@ -3,6 +3,7 @@
 #include "pch.h"
 #include "winget/PackageTrackingCatalog.h"
 #include "PackageTrackingCatalogSourceFactory.h"
+#include "winget/Pin.h"
 #include "winget/RepositorySource.h"
 #include "Microsoft/SQLiteIndexSource.h"
 #include "AppInstallerDateTime.h"
@@ -79,6 +80,11 @@ namespace AppInstaller::Repository
 
         struct PackageTrackingCatalogSourceFactoryImpl : public ISourceFactory
         {
+            std::string_view TypeName() const override final
+            {
+                return PackageTrackingCatalogSourceFactory::Type();
+            }
+
             std::shared_ptr<ISourceReference> Create(const SourceDetails& details) override final
             {
                 THROW_HR_IF(E_INVALIDARG, !Utility::CaseInsensitiveEquals(details.Type, PackageTrackingCatalogSourceFactory::Type()));
@@ -192,21 +198,19 @@ namespace AppInstaller::Repository
         SQLiteIndex::IdType Id;
     };
 
-    PackageTrackingCatalog::Version::Version() = default;
     PackageTrackingCatalog::Version::Version(const Version&) = default;
     PackageTrackingCatalog::Version& PackageTrackingCatalog::Version::operator=(const Version&) = default;
     PackageTrackingCatalog::Version::Version(Version&&) noexcept = default;
     PackageTrackingCatalog::Version& PackageTrackingCatalog::Version::operator=(Version&&) noexcept = default;
     PackageTrackingCatalog::Version::~Version() = default;
 
-    PackageTrackingCatalog::Version::Version(std::shared_ptr<implementation>&& value) :
-        m_implementation(std::move(value)) {}
+    PackageTrackingCatalog::Version::Version(PackageTrackingCatalog& catalog, std::shared_ptr<implementation>&& value) :
+        m_catalog(catalog), m_implementation(std::move(value)) {}
 
     void PackageTrackingCatalog::Version::SetMetadata(PackageVersionMetadata metadata, const Utility::NormalizedString& value)
     {
-        UNREFERENCED_PARAMETER(metadata);
-        UNREFERENCED_PARAMETER(value);
-        THROW_HR(E_NOTIMPL);
+        auto& index = m_catalog.m_implementation->Source->GetIndex();
+        index.SetMetadataByManifestId(m_implementation->Id, metadata, value);
     }
 
     PackageTrackingCatalog::Version PackageTrackingCatalog::RecordInstall(
@@ -215,7 +219,6 @@ namespace AppInstaller::Repository
         bool isUpgrade)
     {
         // TODO: Store additional information from these if needed
-        UNREFERENCED_PARAMETER(installer);
         UNREFERENCED_PARAMETER(isUpgrade);
 
         auto& index = m_implementation->Source->GetIndex();
@@ -239,9 +242,21 @@ namespace AppInstaller::Repository
         strstr << Utility::GetCurrentUnixEpoch();
         index.SetMetadataByManifestId(manifestId, PackageVersionMetadata::TrackingWriteTime, strstr.str());
 
+        if (installer.RequireExplicitUpgrade)
+        {
+            index.SetMetadataByManifestId(manifestId, PackageVersionMetadata::PinnedState, ToString(Pinning::PinType::PinnedByManifest));
+        }
+
+        // Record installed architecture and locale if applicable
+        index.SetMetadataByManifestId(manifestId, PackageVersionMetadata::InstalledArchitecture, ToString(installer.Arch));
+        if (!installer.Locale.empty())
+        {
+            index.SetMetadataByManifestId(manifestId, PackageVersionMetadata::InstalledLocale, installer.Locale);
+        }
+
         std::shared_ptr<Version::implementation> result = std::make_shared<Version::implementation>();
         result->Id = manifestId;
-        return { std::move(result) };
+        return { *this, std::move(result) };
     }
 
     void PackageTrackingCatalog::RecordUninstall(const Utility::LocIndString& packageIdentifier)

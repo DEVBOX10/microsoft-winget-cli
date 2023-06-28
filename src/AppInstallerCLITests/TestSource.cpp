@@ -9,27 +9,6 @@ using namespace AppInstaller::Repository;
 
 namespace TestCommon
 {
-    namespace
-    {
-        template<AppInstaller::Manifest::Localization Field>
-        void BuildPackageVersionMultiPropertyWithFallback(std::vector<Utility::LocIndString>& result, const Manifest::Manifest& VersionManifest)
-        {
-            result.emplace_back(VersionManifest.DefaultLocalization.Get<Field>());
-            for (const auto& loc : VersionManifest.Localizations)
-            {
-                auto f = loc.Get<Field>();
-                if (f.empty())
-                {
-                    result.emplace_back(loc.Get<Field>());
-                }
-                else
-                {
-                    result.emplace_back(std::move(f));
-                }
-            }
-        }
-    }
-
     TestPackageVersion::TestPackageVersion(const Manifest& manifest, MetadataMap installationMetadata, std::weak_ptr<const ISource> source) :
         VersionManifest(manifest), Metadata(std::move(installationMetadata)), Source(source) {}
 
@@ -50,6 +29,12 @@ namespace TestCommon
             return LocIndString{ VersionManifest.Channel };
         case PackageVersionProperty::SourceIdentifier:
             return LocIndString{ Source.lock()->GetIdentifier() };
+        case PackageVersionProperty::Publisher:
+            return LocIndString{ VersionManifest.DefaultLocalization.Get<AppInstaller::Manifest::Localization::Publisher>() };
+        case PackageVersionProperty::ArpMinVersion:
+            return LocIndString{ VersionManifest.GetArpVersionRange().IsEmpty() ? "" : VersionManifest.GetArpVersionRange().GetMinVersion().ToString() };
+        case PackageVersionProperty::ArpMaxVersion:
+            return LocIndString{ VersionManifest.GetArpVersionRange().IsEmpty() ? "" : VersionManifest.GetArpVersionRange().GetMaxVersion().ToString() };
         default:
             return {};
         }
@@ -64,20 +49,27 @@ namespace TestCommon
         case PackageVersionMultiProperty::PackageFamilyName:
             for (const auto& installer : VersionManifest.Installers)
             {
-                AddFoldedIfHasValueAndNotPresent(installer.PackageFamilyName, result);
+                AddIfHasValueAndNotPresent(installer.PackageFamilyName, result, true);
             }
             break;
         case PackageVersionMultiProperty::ProductCode:
             for (const auto& installer : VersionManifest.Installers)
             {
-                AddFoldedIfHasValueAndNotPresent(installer.ProductCode, result);
+                bool shouldFoldCaseForNonPortable = installer.EffectiveInstallerType() != AppInstaller::Manifest::InstallerTypeEnum::Portable;
+                AddIfHasValueAndNotPresent(installer.ProductCode, result, shouldFoldCaseForNonPortable);
             }
             break;
         case PackageVersionMultiProperty::Name:
-            BuildPackageVersionMultiPropertyWithFallback<AppInstaller::Manifest::Localization::PackageName>(result, VersionManifest);
+            for (auto name : VersionManifest.GetPackageNames())
+            {
+                result.emplace_back(std::move(name));
+            }
             break;
         case PackageVersionMultiProperty::Publisher:
-            BuildPackageVersionMultiPropertyWithFallback<AppInstaller::Manifest::Localization::Publisher>(result, VersionManifest);
+            for (auto publisher : VersionManifest.GetPublishers())
+            {
+                result.emplace_back(std::move(publisher));
+            }
             break;
         case PackageVersionMultiProperty::Locale:
             result.emplace_back(VersionManifest.DefaultLocalization.Locale);
@@ -106,15 +98,15 @@ namespace TestCommon
         return Metadata;
     }
 
-    void TestPackageVersion::AddFoldedIfHasValueAndNotPresent(const Utility::NormalizedString& value, std::vector<LocIndString>& target)
+    void TestPackageVersion::AddIfHasValueAndNotPresent(const Utility::NormalizedString& value, std::vector<LocIndString>& target, bool folded)
     {
         if (!value.empty())
         {
-            std::string folded = FoldCase(value);
-            auto itr = std::find(target.begin(), target.end(), folded);
+            std::string valueString = folded ? FoldCase(value) : value;
+            auto itr = std::find(target.begin(), target.end(), valueString);
             if (itr == target.end())
             {
-                target.emplace_back(std::move(folded));
+                target.emplace_back(std::move(valueString));
             }
         }
     }
@@ -170,17 +162,17 @@ namespace TestCommon
         return InstalledVersion;
     }
 
-    std::vector<PackageVersionKey> TestPackage::GetAvailableVersionKeys() const
+    std::vector<PackageVersionKey> TestPackage::GetAvailableVersionKeys(PinBehavior) const
     {
         std::vector<PackageVersionKey> result;
         for (const auto& version : AvailableVersions)
         {
-            result.emplace_back(PackageVersionKey("", version->GetProperty(PackageVersionProperty::Version).get(), version->GetProperty(PackageVersionProperty::Channel).get()));
+            result.emplace_back(PackageVersionKey(version->GetSource().GetIdentifier(), version->GetProperty(PackageVersionProperty::Version).get(), version->GetProperty(PackageVersionProperty::Channel).get()));
         }
         return result;
     }
 
-    std::shared_ptr<IPackageVersion> TestPackage::GetLatestAvailableVersion() const
+    std::shared_ptr<IPackageVersion> TestPackage::GetLatestAvailableVersion(PinBehavior) const
     {
         if (AvailableVersions.empty())
         {
@@ -204,7 +196,7 @@ namespace TestCommon
         return {};
     }
 
-    bool TestPackage::IsUpdateAvailable() const
+    bool TestPackage::IsUpdateAvailable(PinBehavior) const
     {
         if (InstalledVersion && !AvailableVersions.empty())
         {
@@ -269,6 +261,11 @@ namespace TestCommon
         {
             return {};
         }
+    }
+
+    std::string_view TestSourceFactory::TypeName() const
+    {
+        return "*TestSource"sv;
     }
 
     std::shared_ptr<ISourceReference> TestSourceFactory::Create(const SourceDetails& details)

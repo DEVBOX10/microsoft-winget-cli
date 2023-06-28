@@ -4,8 +4,10 @@
 namespace IndexCreationTool
 {
     using System;
+    using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
+    using System.Linq;
 
     class Program
     {
@@ -19,11 +21,18 @@ namespace IndexCreationTool
             string appxManifestPath = string.Empty;
             string certPath = string.Empty;
 
+            // List of directories to include. By default, include all directories.
+            List<string> includeDirList = new() { string.Empty };
+
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "-d" && ++i < args.Length)
                 {
                     rootDir = args[i];
+                }
+                else if (args[i] == "-i" && ++i < args.Length)
+                {
+                    includeDirList = args[i].Split(",").ToList();
                 }
                 else if (args[i] == "-m" && ++i < args.Length)
                 {
@@ -37,7 +46,7 @@ namespace IndexCreationTool
 
             if (string.IsNullOrEmpty(rootDir))
             {
-                Console.WriteLine("Usage: IndexCreationTool.exe -d <Path to search for yaml> [-m <appxmanifest for index package> [-c <cert for signing index package>]]");
+                Console.WriteLine("Usage: IndexCreationTool.exe -d <Path to search for yaml> [-i <Comma-separated list of included dirs in the search for yaml. If not specified, include all dirs>] [-m <appxmanifest for index package> [-c <cert for signing index package>]]");
                 return;
             }
 
@@ -50,10 +59,38 @@ namespace IndexCreationTool
 
                 using (var indexHelper = WinGetUtilWrapper.Create(IndexName))
                 {
-                    foreach (string file in Directory.EnumerateFiles(rootDir, "*.yaml", SearchOption.AllDirectories))
+                    foreach (string includeDir in includeDirList)
                     {
-                        indexHelper.AddManifest(file, Path.GetRelativePath(rootDir, file));
+                        var fullPath = Path.Combine(rootDir, includeDir);
+                        Queue<string> filesQueue = new(Directory.EnumerateFiles(fullPath, "*.yaml", SearchOption.AllDirectories));
+
+                        while (filesQueue.Count > 0)
+                        {
+                            int currentCount = filesQueue.Count;
+
+                            for (int i = 0; i < currentCount; i++)
+                            {
+                                string file = filesQueue.Dequeue();
+                                try
+                                {
+                                    indexHelper.AddManifest(file, Path.GetRelativePath(rootDir, file));
+                                }
+                                catch
+                                {
+                                    // If adding manifest to index fails, add to queue and try again.
+                                    // This can occur if there is a package dependency that has not yet been added to the index.
+                                    filesQueue.Enqueue(file);
+                                }
+                            }
+
+                            if (filesQueue.Count == currentCount)
+                            {
+                                Console.WriteLine("Failed to add all manifests in directory to index.");
+                                Environment.Exit(-1);
+                            }
+                        }
                     }
+
                     indexHelper.PrepareForPackaging();
                 }
 

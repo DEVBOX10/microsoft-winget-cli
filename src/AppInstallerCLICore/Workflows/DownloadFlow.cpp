@@ -2,8 +2,11 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include "DownloadFlow.h"
-
+#include <winget/Filesystem.h>
+#include <AppInstallerRuntime.h>
 #include <AppInstallerMsixInfo.h>
+#include <winget/AdminSettings.h>
+#include <AppInstallerDownloader.h>
 
 namespace AppInstaller::CLI::Workflow
 {
@@ -32,12 +35,13 @@ namespace AppInstaller::CLI::Workflow
         std::wstring_view GetInstallerFileExtension(Execution::Context& context)
         {
             const auto& installer = context.Get<Execution::Data::Installer>();
-            switch (installer->InstallerType)
+            switch (installer->BaseInstallerType)
             {
             case InstallerTypeEnum::Burn:
             case InstallerTypeEnum::Exe:
             case InstallerTypeEnum::Inno:
             case InstallerTypeEnum::Nullsoft:
+            case InstallerTypeEnum::Portable:
                 return L".exe"sv;
             case InstallerTypeEnum::Msi:
             case InstallerTypeEnum::Wix:
@@ -67,7 +71,7 @@ namespace AppInstaller::CLI::Workflow
 
             // Assuming that we find a safe stem value in the URI, use it.
             // This should be extremely common, but just in case fall back to the older name style.
-            if (filename.has_stem() && ((filename.string().size() + installerExtension.size()) < MAX_PATH))
+            if (filename.has_stem() && ((filename.wstring().size() + installerExtension.size()) < MAX_PATH))
             {
                 filename = filename.stem();
             }
@@ -78,6 +82,9 @@ namespace AppInstaller::CLI::Workflow
             }
 
             filename += installerExtension;
+
+            // Make file name suitable for file system path
+            filename = Utility::ConvertToUTF16(Utility::MakeSuitablePathPart(filename.u8string()));
 
             return filename;
         }
@@ -122,68 +129,6 @@ namespace AppInstaller::CLI::Workflow
 
             return false;
         }
-
-        // Complicated rename algorithm due to somewhat arbitrary failures.
-        // 1. First, try to rename.
-        // 2. Then, create an empty file for the target, and attempt to rename.
-        // 3. Then, try repeatedly for 500ms in case it is a timing thing.
-        // 4. Attempt to use a hard link if available.
-        // 5. Copy the file if nothing else has worked so far.
-        void RenameFile(const std::filesystem::path& from, const std::filesystem::path& to)
-        {
-            // 1. First, try to rename.
-            try
-            {
-                // std::filesystem::rename() handles motw correctly if applicable.
-                std::filesystem::rename(from, to);
-                return;
-            }
-            CATCH_LOG();
-
-            // 2. Then, create an empty file for the target, and attempt to rename.
-            //    This seems to fix things in certain cases, so we do it.
-            try
-            {
-                {
-                    std::ofstream targetFile{ to };
-                }
-                std::filesystem::rename(from, to);
-                return;
-            }
-            CATCH_LOG();
-
-            // 3. Then, try repeatedly for 500ms in case it is a timing thing.
-            for (int i = 0; i < 5; ++i)
-            {
-                try
-                {
-                    std::this_thread::sleep_for(100ms);
-                    std::filesystem::rename(from, to);
-                    return;
-                }
-                CATCH_LOG();
-            }
-
-            // 4. Attempt to use a hard link if available.
-            if (Runtime::SupportsHardLinks(from))
-            {
-                try
-                {
-                    // Create a hard link to the file; the installer will be left in the temp directory afterward
-                    // but it is better to succeed the operation and leave a file around than to fail.
-                    // First we have to remove the target file as the function will not overwrite.
-                    std::filesystem::remove(to);
-                    std::filesystem::create_hard_link(from, to);
-                    return;
-                }
-                CATCH_LOG();
-            }
-
-            // 5. Copy the file if nothing else has worked so far.
-            // Create a copy of the file; the installer will be left in the temp directory afterward
-            // but it is better to succeed the operation and leave a file around than to fail.
-            std::filesystem::copy_file(from, to, std::filesystem::copy_options::overwrite_existing);
-        }
     }
 
     void DownloadInstaller(Execution::Context& context)
@@ -203,14 +148,16 @@ namespace AppInstaller::CLI::Workflow
         if (!context.Contains(Execution::Data::InstallerPath))
         {
             const auto& installer = context.Get<Execution::Data::Installer>().value();
-            switch (installer.InstallerType)
+            switch (installer.BaseInstallerType)
             {
             case InstallerTypeEnum::Exe:
             case InstallerTypeEnum::Burn:
             case InstallerTypeEnum::Inno:
             case InstallerTypeEnum::Msi:
             case InstallerTypeEnum::Nullsoft:
+            case InstallerTypeEnum::Portable: 
             case InstallerTypeEnum::Wix:
+            case InstallerTypeEnum::Zip:
                 context << DownloadInstallerFile;
                 break;
             case InstallerTypeEnum::Msix:
@@ -241,7 +188,7 @@ namespace AppInstaller::CLI::Workflow
     void CheckForExistingInstaller(Execution::Context& context)
     {
         const auto& installer = context.Get<Execution::Data::Installer>().value();
-        if (installer.InstallerType == InstallerTypeEnum::MSStore)
+        if (installer.EffectiveInstallerType() == InstallerTypeEnum::MSStore)
         {
             // No installer is downloaded in this case
             return;
@@ -293,7 +240,7 @@ namespace AppInstaller::CLI::Workflow
         // Use the SHA256 hash of the installer as the identifier for the download
         downloadInfo.ContentId = SHA256::ConvertToString(installer.Sha256);
 
-        context.Reporter.Info() << "Downloading " << Execution::UrlEmphasis << installer.Url << std::endl;
+        context.Reporter.Info() << Resource::String::Downloading << ' ' << Execution::UrlEmphasis << installer.Url << std::endl;
 
         std::optional<std::vector<BYTE>> hash;
 
@@ -351,24 +298,14 @@ namespace AppInstaller::CLI::Workflow
             const auto& installer = context.Get<Execution::Data::Installer>().value();
 
             Msix::MsixInfo msixInfo(installer.Url);
-            auto signature = msixInfo.GetSignature();
-
-            auto signatureHash = SHA256::ComputeHash(signature.data(), static_cast<uint32_t>(signature.size()));
+            auto signatureHash = msixInfo.GetSignatureHash();
 
             context.Add<Execution::Data::HashPair>(std::make_pair(installer.SignatureSha256, signatureHash));
         }
-        catch (const winrt::hresult_error& e)
+        catch (...)
         {
-            if (static_cast<HRESULT>(e.code()) == HRESULT_FROM_WIN32(ERROR_NO_RANGES_PROCESSED) ||
-                HRESULT_FACILITY(e.code()) == FACILITY_HTTP)
-            {
-                // Failed to get signature hash through HttpStream, use download
-                downloadInstead = true;
-            }
-            else
-            {
-                throw;
-            }
+            AICLI_LOG(CLI, Info, << "Failed to get msix signature hash, fall back to direct download.");
+            downloadInstead = true;
         }
 
         if (downloadInstead)
@@ -396,18 +333,18 @@ namespace AppInstaller::CLI::Workflow
             {
                 context.Reporter.Error() << Resource::String::InstallerHashMismatchAdminBlock << std::endl;
             }
+            else if (!Settings::IsAdminSettingEnabled(Settings::AdminSetting::InstallerHashOverride))
+            {
+                context.Reporter.Error() << Resource::String::InstallerHashMismatchError << std::endl;
+            }
             else if (overrideHashMismatch)
             {
                 context.Reporter.Warn() << Resource::String::InstallerHashMismatchOverridden << std::endl;
                 return;
             }
-            else if (Settings::GroupPolicies().IsEnabled(Settings::TogglePolicy::Policy::HashOverride))
-            {
-                context.Reporter.Error() << Resource::String::InstallerHashMismatchOverrideRequired << std::endl;
-            }
             else
             {
-                context.Reporter.Error() << Resource::String::InstallerHashMismatchError << std::endl;
+                context.Reporter.Error() << Resource::String::InstallerHashMismatchOverrideRequired << std::endl;
             }
 
             AICLI_TERMINATE_CONTEXT(APPINSTALLER_CLI_ERROR_INSTALLER_HASH_MISMATCH);
@@ -475,12 +412,12 @@ namespace AppInstaller::CLI::Workflow
             auto existingFileHash = SHA256::ComputeHash(inStream);
             context.Add<Execution::Data::HashPair>(std::make_pair(installer.Sha256, existingFileHash));
         }
-        else if (installer.InstallerType == InstallerTypeEnum::MSStore)
+        else if (installer.EffectiveInstallerType() == InstallerTypeEnum::MSStore)
         {
             // No installer file in this case
             return;
         }
-        else if (installer.InstallerType == InstallerTypeEnum::Msix && !installer.SignatureSha256.empty())
+        else if (installer.EffectiveInstallerType() == InstallerTypeEnum::Msix && !installer.SignatureSha256.empty())
         {
             // We didn't download the installer file before. Just verify the signature hash again.
             context << GetMsixSignatureHash;
@@ -513,7 +450,7 @@ namespace AppInstaller::CLI::Workflow
             return;
         }
 
-        RenameFile(installerPath, renamedDownloadedInstaller);
+        Filesystem::RenameFile(installerPath, renamedDownloadedInstaller);
 
         installerPath.assign(renamedDownloadedInstaller);
         AICLI_LOG(CLI, Info, << "Successfully renamed downloaded installer. Path: " << installerPath);

@@ -130,6 +130,14 @@ namespace AppInstaller::Repository
                 details.Type = Microsoft::PredefinedInstalledSourceFactory::Type();
                 details.Arg = Microsoft::PredefinedInstalledSourceFactory::FilterToString(Microsoft::PredefinedInstalledSourceFactory::Filter::None);
                 return details;
+            case PredefinedSource::InstalledUser:
+                details.Type = Microsoft::PredefinedInstalledSourceFactory::Type();
+                details.Arg = Microsoft::PredefinedInstalledSourceFactory::FilterToString(Microsoft::PredefinedInstalledSourceFactory::Filter::User);
+                return details;
+            case PredefinedSource::InstalledMachine:
+                details.Type = Microsoft::PredefinedInstalledSourceFactory::Type();
+                details.Arg = Microsoft::PredefinedInstalledSourceFactory::FilterToString(Microsoft::PredefinedInstalledSourceFactory::Filter::Machine);
+                return details;
             case PredefinedSource::ARP:
                 details.Type = Microsoft::PredefinedInstalledSourceFactory::Type();
                 details.Arg = Microsoft::PredefinedInstalledSourceFactory::FilterToString(Microsoft::PredefinedInstalledSourceFactory::Filter::ARP);
@@ -251,6 +259,8 @@ namespace AppInstaller::Repository
 
     Source::Source(WellKnownSource source)
     {
+        THROW_HR_IF(APPINSTALLER_CLI_ERROR_BLOCKED_BY_POLICY, !IsWellKnownSourceEnabled(source));
+
         SourceDetails details = GetWellKnownSourceDetailsInternal(source);
         m_sourceReferences.emplace_back(CreateSourceFromDetails(details));
     }
@@ -259,9 +269,20 @@ namespace AppInstaller::Repository
     {
         m_isSourceToBeAdded = true;
         SourceDetails details;
-        details.Name = name;
-        details.Arg = arg;
-        details.Type = type;
+
+        std::optional<WellKnownSource> wellKnownSourceCheck = CheckForWellKnownSourceMatch(name, arg, type);
+
+        if (wellKnownSourceCheck)
+        {
+            details = GetWellKnownSourceDetailsInternal(wellKnownSourceCheck.value());
+        }
+        else
+        {
+            details.Name = name;
+            details.Arg = arg;
+            details.Type = type;
+        }
+
         m_sourceReferences.emplace_back(CreateSourceFromDetails(details));
     }
 
@@ -408,6 +429,14 @@ namespace AppInstaller::Repository
         return m_sourceReferences[0]->SetCustomHeader(header);
     }
 
+    void Source::SetCaller(std::string caller)
+    {
+        for (auto& sourceReference : m_sourceReferences)
+        {
+            sourceReference->SetCaller(caller);
+        }
+    }
+
     SearchResult Source::Search(const SearchRequest& request) const
     {
         THROW_HR_IF(HRESULT_FROM_WIN32(ERROR_INVALID_STATE), !m_source);
@@ -487,7 +516,7 @@ namespace AppInstaller::Repository
 
         if (!m_source)
         {
-            SourceList sourceList;
+            std::unique_ptr<SourceList> sourceList;
 
             // Check for updates before opening.
             for (auto& sourceReference : m_sourceReferences)
@@ -501,9 +530,14 @@ namespace AppInstaller::Repository
                         // to avoid the progress bar fill up multiple times.
                         if (BackgroundUpdateSourceFromDetails(details, progress))
                         {
-                            auto detailsInternal = sourceList.GetSource(details.Name);
+                            if (sourceList == nullptr)
+                            {
+                                sourceList = std::make_unique<SourceList>();
+                            }
+
+                            auto detailsInternal = sourceList->GetSource(details.Name);
                             detailsInternal->LastUpdateTime = details.LastUpdateTime;
-                            sourceList.SaveMetadata(*detailsInternal);
+                            sourceList->SaveMetadata(*detailsInternal);
                         }
                         else
                         {
@@ -569,6 +603,13 @@ namespace AppInstaller::Repository
 
         auto& sourceDetails = m_sourceReferences[0]->GetDetails();
 
+        // If the source type is empty, use a default.
+        // AddSourceForDetails will also check for empty, but we need the actual type before that for validation.
+        if (sourceDetails.Type.empty())
+        {
+            sourceDetails.Type = ISourceFactory::GetForType("")->TypeName();
+        }
+
         AICLI_LOG(Repo, Info, << "Adding source: Name[" << sourceDetails.Name << "], Type[" << sourceDetails.Type << "], Arg[" << sourceDetails.Arg << "]");
 
         // Check all sources for the given name.
@@ -585,7 +626,12 @@ namespace AppInstaller::Repository
         }
 
         sourceDetails.LastUpdateTime = Utility::ConvertUnixEpochToSystemClock(0);
-        sourceDetails.Origin = SourceOrigin::User;
+
+        // Allow the origin to stay as Default if the incoming details match a well known value
+        if (!(sourceDetails.Origin == SourceOrigin::Default && CheckForWellKnownSourceMatch(sourceDetails.Name, sourceDetails.Arg, sourceDetails.Type)))
+        {
+            sourceDetails.Origin = SourceOrigin::User;
+        }
 
         bool result = AddSourceFromDetails(sourceDetails, progress);
         if (result)

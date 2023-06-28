@@ -31,12 +31,6 @@ To manually update the source use `winget source update`
 
 The `visual` settings involve visual elements that are displayed by WinGet
 
-```json
-    "visual": {
-        "progressBar": "accent"
-    },
-```
-
 ### progressBar
 
 Color of the progress bar that WinGet displays when not specified by arguments. 
@@ -45,9 +39,65 @@ Color of the progress bar that WinGet displays when not specified by arguments.
 - retro
 - rainbow
 
+```json
+    "visual": {
+        "progressBar": "accent"
+    },
+```
+
+### anonymizeDisplayedPaths
+
+Replaces some known folder paths with their respective environment variable. Defaults to true.
+
+```json
+    "visual": {
+        "anonymizeDisplayedPaths": true
+    },
+```
+
 ## Install Behavior
 
 The `installBehavior` settings affect the default behavior of installing and upgrading (where applicable) packages.
+
+### Disable Install Notes
+The `disableInstallNotes` behavior affects whether installation notes are shown after a successful install. Defaults to `false` if value is not set or is invalid.
+
+```json
+    "installBehavior": {
+        "disableInstallNotes": true
+    },
+```
+
+### Portable Package User Root
+The `portablePackageUserRoot` setting affects the default root directory where packages are installed to under `User` scope. This setting only applies to packages with the `portable` installer type. Defaults to `%LOCALAPPDATA%/Microsoft/WinGet/Packages/` if value is not set or is invalid.
+
+> Note: This setting value must be an absolute path.
+
+```json
+    "installBehavior": {
+        "portablePackageUserRoot": "C:/Users/FooBar/Packages"
+    },
+```
+
+### Portable Package Machine Root
+The `portablePackageMachineRoot` setting affects the default root directory where packages are installed to under `Machine` scope. This setting only applies to packages with the `portable` installer type. Defaults to `%PROGRAMFILES%/WinGet/Packages/` if value is not set or is invalid.
+
+> Note: This setting value must be an absolute path.
+
+```json
+    "installBehavior": {
+        "portablePackageMachineRoot": "C:/Program Files/Packages/Portable"
+    },
+```
+
+### Skip Dependencies
+The 'skipDependencies' behavior affects whether dependencies are installed for a given package. Defaults to 'false' if value is not set or is invalid.
+
+```json
+    "installBehavior": {
+        "skipDependencies": true
+    },
+```
 
 ### Preferences and Requirements
 
@@ -90,11 +140,35 @@ The `architectures` behavior affects what architectures will be selected when in
     },
 ```
 
+### Default install root
+
+The `defaultInstallRoot` affects the install location when a package requires one. This can be overridden by the `--location` parameter. This setting is only used when a package manifest includes `InstallLocationRequired`, and the actual location is obtained by appending the package ID to the root.
+
+```json
+    "installBehavior": {
+        "defaultInstallRoot": "C:/installRoot"
+    },
+```
+
+## Uninstall Behavior
+
+The `uninstallBehavior` settings affect the default behavior of uninstalling (where applicable) packages.
+
+### Purge Portable Package
+
+The `purgePortablePackage` behavior affects the default behavior for uninstalling a portable package. If set to `true`, uninstall will remove all files and directories relevant to the `portable` package. This setting only applies to packages with the `portable` installer type. Defaults to `false` if value is not set or is invalid.
+
+```json
+    "uninstallBehavior": {
+        "purgePortablePackage": true
+    },
+```
+
 ## Telemetry
 
 The `telemetry` settings control whether winget writes ETW events that may be sent to Microsoft on a default installation of Windows.
 
-See [details on telemetry](../README.md#datatelemetry), and our [primary privacy statement](../privacy.md).
+See [details on telemetry](../README.md#datatelemetry), and our [primary privacy statement](../PRIVACY.md).
 
 ### disable
 
@@ -138,6 +212,20 @@ The `doProgressTimeoutInSeconds` setting updates the number of seconds to wait w
    }
 ```
 
+## Interactivity
+
+The `interactivity` settings control whether winget may show interactive prompts during execution. Note that this refers only to prompts shown by winget itself and not to those shown by package installers.
+
+### disable
+
+```json
+    "interactivity": {
+        "disable": true
+    },
+```
+
+If set to true, the `interactivity.disable` setting will prevent any interactive prompt from being shown.
+
 ## Experimental Features
 
 To allow work to be done and distributed to early adopters for feedback, settings can be used to enable "experimental" features. 
@@ -162,12 +250,35 @@ You can enable the feature as shown below.
        "directMSI": true
    },
 ```
-### Dependencies
+
+### dependencies
 
 Experimental feature with the aim of managing dependencies, as of now it only shows package dependency information. You can enable the feature as shown below.
 
 ```json
    "experimentalFeatures": {
        "dependencies": true
+   },
+```
+
+### configuration
+
+This feature enables the configuration commands. These commands allow configuring the system into a desired state.
+You can enable the feature as shown below.
+
+```json
+   "experimentalFeatures": {
+       "configuration": true
+   },
+```
+
+### windowsFeature
+
+This feature enables the ability to enable Windows Feature dependencies during installation.
+You can enable the feature as shown below.
+
+```json
+   "experimentalFeatures": {
+       "windowsFeature": true
    },
 ```

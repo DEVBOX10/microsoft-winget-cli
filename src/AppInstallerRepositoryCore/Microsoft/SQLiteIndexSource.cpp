@@ -48,7 +48,8 @@ namespace AppInstaller::Repository::Microsoft
                     return LocIndString{ GetReferenceSource()->GetDetails().Name };
                 default:
                     // Values coming from the index will always be localized/independent.
-                    return LocIndString{ GetReferenceSource()->GetIndex().GetPropertyByManifestId(m_manifestId, property).value() };
+                    std::optional<std::string> optValue = GetReferenceSource()->GetIndex().GetPropertyByManifestId(m_manifestId, property);
+                    return LocIndString{ optValue ? optValue.value() : std::string{} };
                 }
             }
 
@@ -73,13 +74,37 @@ namespace AppInstaller::Repository::Microsoft
                 THROW_HR_IF(E_NOT_SET, !relativePathOpt);
 
                 std::optional<std::string> manifestHashString = source->GetIndex().GetPropertyByManifestId(m_manifestId, PackageVersionProperty::ManifestSHA256Hash);
+                THROW_HR_IF(APPINSTALLER_CLI_ERROR_SOURCE_DATA_INTEGRITY_FAILURE, source->RequireManifestHash() && !manifestHashString);
+
                 SHA256::HashBuffer manifestSHA256;
                 if (manifestHashString)
                 {
                     manifestSHA256 = SHA256::ConvertToBytes(manifestHashString.value());
                 }
 
-                return GetManifestFromArgAndRelativePath(source->GetDetails().Arg, relativePathOpt.value(), manifestSHA256);
+                // Try the primary location 
+                HRESULT primaryHR = S_OK;
+                try
+                {
+                    return GetManifestFromArgAndRelativePath(source->GetDetails().Arg, relativePathOpt.value(), manifestSHA256);
+                }
+                catch (...)
+                {
+                    if (source->GetDetails().AlternateArg.empty())
+                    {
+                        throw;
+                    }
+                    primaryHR = LOG_CAUGHT_EXCEPTION_MSG("GetManifest failed on primary location");
+                }
+
+                // Try alternate location
+                try
+                {
+                    return GetManifestFromArgAndRelativePath(source->GetDetails().AlternateArg, relativePathOpt.value(), manifestSHA256);
+                }
+                CATCH_LOG_MSG("GetManifest failed on alternate location");
+
+                THROW_HR(primaryHR);
             }
 
             Source GetSource() const override
@@ -120,7 +145,6 @@ namespace AppInstaller::Repository::Microsoft
                     const int MaxRetryCount = 2;
                     for (int retryCount = 0; retryCount < MaxRetryCount; ++retryCount)
                     {
-                        bool success = false;
                         try
                         {
                             auto downloadHash = Utility::DownloadToStream(fullPath, manifestStream, Utility::DownloadType::Manifest, emptyCallback, !expectedHash.empty());
@@ -131,7 +155,7 @@ namespace AppInstaller::Repository::Microsoft
                                 THROW_HR(APPINSTALLER_CLI_ERROR_SOURCE_DATA_INTEGRITY_FAILURE);
                             }
 
-                            success = true;
+                            break;
                         }
                         catch (...)
                         {
@@ -144,11 +168,6 @@ namespace AppInstaller::Repository::Microsoft
                             {
                                 throw;
                             }
-                        }
-
-                        if (success)
-                        {
-                            break;
                         }
                     }
 
@@ -244,7 +263,7 @@ namespace AppInstaller::Repository::Microsoft
                 return {};
             }
 
-            std::vector<PackageVersionKey> GetAvailableVersionKeys() const override
+            std::vector<PackageVersionKey> GetAvailableVersionKeys(PinBehavior) const override
             {
                 std::shared_ptr<SQLiteIndexSource> source = GetReferenceSource();
                 std::vector<Utility::VersionAndChannel> versions = source->GetIndex().GetVersionKeysById(m_idId);
@@ -257,7 +276,7 @@ namespace AppInstaller::Repository::Microsoft
                 return result;
             }
 
-            std::shared_ptr<IPackageVersion> GetLatestAvailableVersion() const override
+            std::shared_ptr<IPackageVersion> GetLatestAvailableVersion(PinBehavior) const override
             {
                 return GetLatestVersionInternal();
             }
@@ -282,7 +301,7 @@ namespace AppInstaller::Repository::Microsoft
                 return {};
             }
 
-            bool IsUpdateAvailable() const override
+            bool IsUpdateAvailable(PinBehavior) const override
             {
                 return false;
             }
@@ -316,12 +335,12 @@ namespace AppInstaller::Repository::Microsoft
                 return GetLatestVersionInternal();
             }
 
-            std::vector<PackageVersionKey> GetAvailableVersionKeys() const override
+            std::vector<PackageVersionKey> GetAvailableVersionKeys(PinBehavior) const override
             {
                 return {};
             }
 
-            std::shared_ptr<IPackageVersion> GetLatestAvailableVersion() const override
+            std::shared_ptr<IPackageVersion> GetLatestAvailableVersion(PinBehavior) const override
             {
                 return {};
             }
@@ -331,7 +350,7 @@ namespace AppInstaller::Repository::Microsoft
                 return {};
             }
 
-            bool IsUpdateAvailable() const override
+            bool IsUpdateAvailable(PinBehavior) const override
             {
                 return false;
             }
@@ -350,8 +369,13 @@ namespace AppInstaller::Repository::Microsoft
         };
     }
 
-    SQLiteIndexSource::SQLiteIndexSource(const SourceDetails& details, SQLiteIndex&& index, Synchronization::CrossProcessReaderWriteLock&& lock, bool isInstalledSource) :
-        m_details(details), m_lock(std::move(lock)), m_isInstalled(isInstalledSource), m_index(std::move(index))
+    SQLiteIndexSource::SQLiteIndexSource(
+        const SourceDetails& details,
+        SQLiteIndex&& index,
+        Synchronization::CrossProcessReaderWriteLock&& lock,
+        bool isInstalledSource,
+        bool requireManifestHash) :
+        m_details(details), m_lock(std::move(lock)), m_isInstalled(isInstalledSource), m_index(std::move(index)), m_requireManifestHash(requireManifestHash)
     {
     }
 

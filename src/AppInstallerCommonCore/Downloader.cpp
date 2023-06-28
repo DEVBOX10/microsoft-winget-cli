@@ -10,10 +10,13 @@
 #include "Public/AppInstallerLogging.h"
 #include "Public/AppInstallerTelemetry.h"
 #include "Public/winget/UserSettings.h"
+#include "Public/winget/Filesystem.h"
 #include "DODownloader.h"
+#include "HttpStream/HttpRandomAccessStream.h"
 
 using namespace AppInstaller::Runtime;
 using namespace AppInstaller::Settings;
+using namespace AppInstaller::Filesystem;
 
 namespace AppInstaller::Utility
 {
@@ -29,17 +32,19 @@ namespace AppInstaller::Utility
 
         AICLI_LOG(Core, Info, << "WinINet downloading from url: " << url);
 
-        wil::unique_hinternet session(InternetOpenA(
-            Runtime::GetDefaultUserAgent().get().c_str(),
+        auto agentWide = Utility::ConvertToUTF16(Runtime::GetDefaultUserAgent().get());
+        wil::unique_hinternet session(InternetOpen(
+            agentWide.c_str(),
             INTERNET_OPEN_TYPE_PRECONFIG,
             NULL,
             NULL,
             0));
         THROW_LAST_ERROR_IF_NULL_MSG(session, "InternetOpen() failed.");
 
-        wil::unique_hinternet urlFile(InternetOpenUrlA(
+        auto urlWide = Utility::ConvertToUTF16(url);
+        wil::unique_hinternet urlFile(InternetOpenUrl(
             session.get(),
-            url.c_str(),
+            urlWide.c_str(),
             NULL,
             0,
             INTERNET_FLAG_IGNORE_REDIRECT_TO_HTTPS, // This allows http->https redirection
@@ -50,7 +55,7 @@ namespace AppInstaller::Utility
         DWORD requestStatus = 0;
         DWORD cbRequestStatus = sizeof(requestStatus);
 
-        THROW_LAST_ERROR_IF_MSG(!HttpQueryInfoA(urlFile.get(),
+        THROW_LAST_ERROR_IF_MSG(!HttpQueryInfo(urlFile.get(),
             HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER,
             &requestStatus,
             &cbRequestStatus,
@@ -68,7 +73,7 @@ namespace AppInstaller::Utility
         LONGLONG contentLength = 0;
         DWORD cbContentLength = sizeof(contentLength);
 
-        HttpQueryInfoA(
+        HttpQueryInfo(
             urlFile.get(),
             HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER64,
             &contentLength,
@@ -165,7 +170,7 @@ namespace AppInstaller::Utility
 
         // Only Installers should be downloaded with DO currently, as:
         //  - Index :: Constantly changing blob at same location is not what DO is for
-        //  - Manifest :: DO overhead is not needed for small files
+        //  - Manifest / InstallerMetadataCollectionInput :: DO overhead is not needed for small files
         //  - WinGetUtil :: Intentionally not using DO at this time
         if (type == DownloadType::Installer)
         {
@@ -362,5 +367,29 @@ namespace AppInstaller::Utility
         AICLI_LOG(Core, Info, << "Finished applying motw using IAttachmentExecute. Result: " << hr << " IAttachmentExecute::Save() result: " << aesSaveResult);
 
         return aesSaveResult;
+    }
+
+    Microsoft::WRL::ComPtr<IStream> GetReadOnlyStreamFromURI(std::string_view uriStr)
+    {
+        Microsoft::WRL::ComPtr<IStream> inputStream;
+        if (Utility::IsUrlRemote(uriStr))
+        {
+            // Get an IStream from the input uri and try to create package or bundler reader.
+            winrt::Windows::Foundation::Uri uri(Utility::ConvertToUTF16(uriStr));
+            auto randomAccessStream = HttpStream::HttpRandomAccessStream::CreateAsync(uri).get();
+
+            ::IUnknown* rasAsIUnknown = (::IUnknown*)winrt::get_abi(randomAccessStream);
+            THROW_IF_FAILED(CreateStreamOverRandomAccessStream(
+                rasAsIUnknown,
+                IID_PPV_ARGS(inputStream.ReleaseAndGetAddressOf())));
+        }
+        else
+        {
+            std::filesystem::path path(Utility::ConvertToUTF16(uriStr));
+            THROW_IF_FAILED(SHCreateStreamOnFileEx(path.c_str(),
+                STGM_READ | STGM_SHARE_DENY_WRITE | STGM_FAILIFTHERE, 0, FALSE, nullptr, &inputStream));
+        }
+
+        return inputStream;
     }
 }

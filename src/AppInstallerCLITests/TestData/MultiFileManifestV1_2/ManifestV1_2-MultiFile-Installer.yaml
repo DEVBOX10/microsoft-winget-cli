@@ -5,7 +5,7 @@ Platform:
   - Windows.Desktop
   - Windows.Universal
 MinimumOSVersion: 10.0.0.0
-InstallerType: zip
+InstallerType: exe
 Scope: machine
 InstallModes:
   - interactive
@@ -54,6 +54,7 @@ ReleaseDate: 2021-01-01
 InstallerAbortsTerminal: true
 InstallLocationRequired: true
 RequireExplicitUpgrade: true
+DisplayInstallWarnings: true
 ElevationRequirement: elevatesSelf
 UnsupportedOSArchitectures:
   - arm
@@ -70,6 +71,9 @@ Markets:
 ExpectedReturnCodes:
   - InstallerReturnCode: 10
     ReturnResponse: packageInUse
+    ReturnResponseUrl: https://DefaultReturnResponseUrl.com
+UnsupportedArguments:
+  - log
 
 Installers:
   - Architecture: x86
@@ -122,6 +126,7 @@ Installers:
     InstallerAbortsTerminal: false
     InstallLocationRequired: false
     RequireExplicitUpgrade: false
+    DisplayInstallWarnings: false
     ElevationRequirement: elevationRequired
     UnsupportedOSArchitectures:
       - arm64
@@ -131,6 +136,11 @@ Installers:
     ExpectedReturnCodes:
       - InstallerReturnCode: 2
         ReturnResponse: contactSupport
+      - InstallerReturnCode: 3
+        ReturnResponse: custom
+        ReturnResponseUrl: https://defaultReturnResponseUrl.com
+    UnsupportedArguments:
+      - location
   - Architecture: x64
     InstallerType: exe
     InstallerUrl: https://www.microsoft.com/msixsdk/msixsdkx64.exe
@@ -140,7 +150,12 @@ Installers:
     InstallerType: portable
     InstallerUrl: https://www.microsoft.com/msixsdk/msixsdkx86.exe
     InstallerSha256: 69D84CA8899800A5575CE31798293CD4FEBAB1D734A07C2E51E56A28E0DF8C82
+    DisplayInstallWarnings: false
     Commands:
       - standalone
+    ExpectedReturnCodes:
+     - InstallerReturnCode: 11
+       ReturnResponse: custom
+       ReturnResponseUrl: https://defaultReturnResponseUrl.com
 ManifestType: installer
 ManifestVersion: 1.2.0

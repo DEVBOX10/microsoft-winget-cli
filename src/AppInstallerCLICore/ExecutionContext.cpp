@@ -3,6 +3,7 @@
 #include "pch.h"
 #include "ExecutionContext.h"
 #include "COMContext.h"
+#include "Argument.h"
 #include "winget/UserSettings.h"
 
 namespace AppInstaller::CLI::Execution
@@ -122,12 +123,30 @@ namespace AppInstaller::CLI::Execution
     {
         auto clone = std::make_unique<Context>(Reporter, m_threadGlobals);
         clone->m_flags = m_flags;
+        clone->m_executingCommand = m_executingCommand;
         // If the parent is hooked up to the CTRL signal, have the clone be as well
         if (m_disableCtrlHandlerOnExit)
         {
             clone->EnableCtrlHandler();
         }
+        CopyArgsToSubContext(clone.get());
         return clone;
+    }
+
+    void Context::CopyArgsToSubContext(Context* subContext)
+    {
+        auto argProperties = ArgumentCommon::GetFromExecArgs(Args);
+        for (const auto& arg : argProperties)
+        {
+            if (WI_IsFlagSet(arg.TypeCategory, ArgTypeCategory::CopyFlagToSubContext))
+            {
+                subContext->Args.AddArg(arg.Type);
+            }
+            else if (WI_IsFlagSet(arg.TypeCategory, ArgTypeCategory::CopyValueToSubContext))
+            {
+                subContext->Args.AddArg(arg.Type, Args.GetArg(arg.Type));
+            }
+        }
     }
 
     void Context::EnableCtrlHandler(bool enabled)
@@ -208,7 +227,7 @@ namespace AppInstaller::CLI::Execution
         GetThreadGlobals().GetTelemetryLogger().SetExecutionStage(static_cast<uint32_t>(m_executionStage));
     }
 
-    AppInstaller::ThreadLocalStorage::ThreadGlobals& Context::GetThreadGlobals()
+    AppInstaller::ThreadLocalStorage::WingetThreadGlobals& Context::GetThreadGlobals()
     {
         return m_threadGlobals;
     }

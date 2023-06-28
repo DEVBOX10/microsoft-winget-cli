@@ -38,7 +38,7 @@ namespace TestCommon
         std::weak_ptr<const ISource> Source;
 
     protected:
-        static void AddFoldedIfHasValueAndNotPresent(const AppInstaller::Utility::NormalizedString& value, std::vector<LocIndString>& target);
+        static void AddIfHasValueAndNotPresent(const AppInstaller::Utility::NormalizedString& value, std::vector<LocIndString>& target, bool folded = false);
     };
 
     // IPackage for TestSource
@@ -63,10 +63,10 @@ namespace TestCommon
 
         AppInstaller::Utility::LocIndString GetProperty(AppInstaller::Repository::PackageProperty property) const override;
         std::shared_ptr<AppInstaller::Repository::IPackageVersion> GetInstalledVersion() const override;
-        std::vector<AppInstaller::Repository::PackageVersionKey> GetAvailableVersionKeys() const override;
-        std::shared_ptr<AppInstaller::Repository::IPackageVersion> GetLatestAvailableVersion() const override;
+        std::vector<AppInstaller::Repository::PackageVersionKey> GetAvailableVersionKeys(AppInstaller::Repository::PinBehavior) const override;
+        std::shared_ptr<AppInstaller::Repository::IPackageVersion> GetLatestAvailableVersion(AppInstaller::Repository::PinBehavior) const override;
         std::shared_ptr<AppInstaller::Repository::IPackageVersion> GetAvailableVersion(const AppInstaller::Repository::PackageVersionKey& versionKey) const override;
-        bool IsUpdateAvailable() const override;
+        bool IsUpdateAvailable(AppInstaller::Repository::PinBehavior) const override;
         bool IsSame(const IPackage* other) const override;
 
         std::shared_ptr<AppInstaller::Repository::IPackageVersion> InstalledVersion;
@@ -137,6 +137,7 @@ namespace TestCommon
         TestSourceFactory(OpenFunctorWithCustomHeader open) : OnOpenWithCustomHeader(std::move(open)) {}
 
         // ISourceFactory
+        std::string_view TypeName() const override;
         std::shared_ptr<AppInstaller::Repository::ISourceReference> Create(const AppInstaller::Repository::SourceDetails& details) override;
         bool Add(AppInstaller::Repository::SourceDetails& details, AppInstaller::IProgressCallback&) override;
         bool Update(const AppInstaller::Repository::SourceDetails& details, AppInstaller::IProgressCallback&) override;

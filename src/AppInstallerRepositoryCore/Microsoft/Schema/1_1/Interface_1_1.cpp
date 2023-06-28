@@ -25,43 +25,6 @@
 
 namespace AppInstaller::Repository::Microsoft::Schema::V1_1
 {
-    namespace
-    {
-        std::vector<Utility::NormalizedString> GetSystemReferenceStrings(
-            const Manifest::Manifest& manifest,
-            std::function<const Utility::NormalizedString&(const Manifest::ManifestInstaller&)> func)
-        {
-            std::set<Utility::NormalizedString> set;
-
-            for (const auto& installer : manifest.Installers)
-            {
-                const Utility::NormalizedString& string = func(installer);
-                if (!string.empty())
-                {
-                    set.emplace(Utility::FoldCase(string));
-                }
-            }
-
-            std::vector<Utility::NormalizedString> result;
-            for (auto&& string : set)
-            {
-                result.emplace_back(string);
-            }
-
-            return result;
-        }
-
-        std::vector<Utility::NormalizedString> GetPackageFamilyNames(const Manifest::Manifest& manifest)
-        {
-            return GetSystemReferenceStrings(manifest, [](const Manifest::ManifestInstaller& i) -> const Utility::NormalizedString& { return i.PackageFamilyName; });
-        }
-
-        std::vector<Utility::NormalizedString> GetProductCodes(const Manifest::Manifest& manifest)
-        {
-            return GetSystemReferenceStrings(manifest, [](const Manifest::ManifestInstaller& i) -> const Utility::NormalizedString& { return i.ProductCode; });
-        }
-    }
-
     Schema::Version Interface::GetVersion() const
     {
         return { 1, 1 };
@@ -105,8 +68,8 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_1
         // Add the new 1.1 data
         // These system reference strings are all stored with their cases folded so that they can be
         // looked up ordinally; enabling the index to provide efficient searches.
-        PackageFamilyNameTable::EnsureExistsAndInsert(connection, GetPackageFamilyNames(manifest), manifestId);
-        ProductCodeTable::EnsureExistsAndInsert(connection, GetProductCodes(manifest), manifestId);
+        PackageFamilyNameTable::EnsureExistsAndInsert(connection, manifest.GetPackageFamilyNames(), manifestId);
+        ProductCodeTable::EnsureExistsAndInsert(connection, manifest.GetProductCodes(), manifestId);
 
         savepoint.Commit();
 
@@ -120,8 +83,8 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_1
         auto [indexModified, manifestId] = V1_0::Interface::UpdateManifest(connection, manifest, relativePath);
 
         // Update new 1:N tables as necessary
-        indexModified = PackageFamilyNameTable::UpdateIfNeededByManifestId(connection, GetPackageFamilyNames(manifest), manifestId) || indexModified;
-        indexModified = ProductCodeTable::UpdateIfNeededByManifestId(connection, GetProductCodes(manifest), manifestId) || indexModified;
+        indexModified = PackageFamilyNameTable::UpdateIfNeededByManifestId(connection, manifest.GetPackageFamilyNames(), manifestId) || indexModified;
+        indexModified = ProductCodeTable::UpdateIfNeededByManifestId(connection, manifest.GetProductCodes(), manifestId) || indexModified;
 
         savepoint.Commit();
 
@@ -216,7 +179,7 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_1
 
     std::unique_ptr<V1_0::SearchResultsTable> Interface::CreateSearchResultsTable(const SQLite::Connection& connection) const
     {
-        return std::make_unique<SearchResultsTable>(connection);
+        return std::make_unique<V1_1::SearchResultsTable>(connection);
     }
 
     void Interface::PerformQuerySearch(V1_0::SearchResultsTable& resultsTable, const RequestMatch& query) const
@@ -285,11 +248,27 @@ namespace AppInstaller::Repository::Microsoft::Schema::V1_1
 
         if (vacuum)
         {
-            // Force the database to actually shrink the file size.
-            // This *must* be done outside of an active transaction.
-            SQLite::Builder::StatementBuilder builder;
-            builder.Vacuum();
-            builder.Execute(connection);
+            Vacuum(connection);
+        }
+    }
+
+    std::optional<std::string> Interface::GetPropertyByManifestIdInternal(const SQLite::Connection& connection, SQLite::rowid_t manifestId, PackageVersionProperty property) const
+    {
+        switch (property)
+        {
+        case AppInstaller::Repository::PackageVersionProperty::Publisher:
+        {
+            // Publisher is not a primary data member in this version, but it may be stored in the metadata
+            if (ManifestMetadataTable::Exists(connection))
+            {
+                return ManifestMetadataTable::GetMetadataByManifestIdAndMetadata(connection, manifestId, PackageVersionMetadata::Publisher);
+            }
+
+            // No metadata, so no publisher
+            return {};
+        }
+        default:
+            return V1_0::Interface::GetPropertyByManifestIdInternal(connection, manifestId, property);
         }
     }
 }
