@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 #include "pch.h"
 #include "ConfigurationUnitResultInformation.h"
-#include "ConfigurationUnitResultInformation.g.cpp"
 #include "AppInstallerErrors.h"
 
 namespace winrt::Microsoft::Management::Configuration::implementation
@@ -17,6 +16,8 @@ namespace winrt::Microsoft::Management::Configuration::implementation
                 case WINGET_CONFIG_ERROR_UNIT_NOT_FOUND_REPOSITORY:
                 case WINGET_CONFIG_ERROR_UNIT_MULTIPLE_MATCHES:
                 case WINGET_CONFIG_ERROR_UNIT_IMPORT_MODULE:
+                case WINGET_CONFIG_ERROR_UNIT_SETTING_CONFIG_ROOT:
+                case WINGET_CONFIG_ERROR_UNIT_IMPORT_MODULE_ADMIN:
                     return ConfigurationUnitResultSource::ConfigurationSet;
                 case WINGET_CONFIG_ERROR_UNIT_MODULE_CONFLICT:
                     return ConfigurationUnitResultSource::SystemState;
@@ -26,7 +27,7 @@ namespace winrt::Microsoft::Management::Configuration::implementation
         }
     }
 
-    void ConfigurationUnitResultInformation::Initialize(const Configuration::ConfigurationUnitResultInformation& other)
+    void ConfigurationUnitResultInformation::Initialize(const Configuration::IConfigurationUnitResultInformation& other)
     {
         m_resultCode = other.ResultCode();
         m_description = other.Description();

@@ -100,7 +100,7 @@ namespace winrt::Microsoft::Management::Configuration::implementation
             return GetPriority(first) < GetPriority(second);
         }
 
-        void ProcessUnitResult(const Configuration::ConfigurationUnit unit, Configuration::ConfigurationUnitResultInformation resultInformation, ConfigRunSummaryData& result)
+        void ProcessUnitResult(const Configuration::ConfigurationUnit unit, const IConfigurationUnitResultInformation& resultInformation, ConfigRunSummaryData& result)
         {
             hresult resultCode = resultInformation.ResultCode();
             if (FAILED(resultCode))
@@ -131,6 +131,7 @@ namespace winrt::Microsoft::Management::Configuration::implementation
                 summaryItem = &result.InformSummary;
                 break;
             case ConfigurationUnitIntent::Apply:
+            case ConfigurationUnitIntent::Unknown:
                 summaryItem = &result.ApplySummary;
                 break;
             default:
@@ -215,6 +216,12 @@ namespace winrt::Microsoft::Management::Configuration::implementation
         ConfigurationUnitResultSource failurePoint,
         std::wstring_view settingNames) const noexcept try
     {
+        // Change unknown to Apply for telemetry, as it will have been treated that way
+        if (unitIntent == ConfigurationUnitIntent::Unknown)
+        {
+            unitIntent = ConfigurationUnitIntent::Apply;
+        }
+
         if (IsTelemetryEnabled())
         {
             AICLI_TraceLoggingWriteActivity(
@@ -254,7 +261,7 @@ namespace winrt::Microsoft::Management::Configuration::implementation
         const Configuration::ConfigurationUnit& unit,
         ConfigurationUnitIntent runIntent,
         std::string_view action,
-        const Configuration::ConfigurationUnitResultInformation& resultInformation) const noexcept try
+        const IConfigurationUnitResultInformation& resultInformation) const noexcept try
     {
         // We only want to send telemetry for failures of publicly available units.
         if (!IsTelemetryEnabled() || SUCCEEDED(static_cast<int32_t>(resultInformation.ResultCode())))
@@ -282,7 +289,7 @@ namespace winrt::Microsoft::Management::Configuration::implementation
             allSettingsNames.pop_back();
         }
 
-        LogConfigUnitRun(setIdentifier, unit.InstanceIdentifier(), unit.UnitName(), details.ModuleName(), unit.Intent(), runIntent, action, resultInformation.ResultCode(), resultInformation.ResultSource(), allSettingsNames);
+        LogConfigUnitRun(setIdentifier, unit.InstanceIdentifier(), unit.Type(), details.ModuleName(), unit.Intent(), runIntent, action, resultInformation.ResultCode(), resultInformation.ResultSource(), allSettingsNames);
     }
     CATCH_LOG();
 

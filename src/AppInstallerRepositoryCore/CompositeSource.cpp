@@ -421,6 +421,8 @@ namespace AppInstaller::Repository
         // we deal with composite packages on CompositePackage.
         struct PinnablePackage : public IPackage
         {
+            static constexpr IPackageType PackageType = IPackageType::PinnablePackage;
+
             PinnablePackage() {}
             PinnablePackage(std::shared_ptr<IPackage> package, std::optional<Pinning::Pin> pin = {})
                 : m_package(package), m_pin(pin)
@@ -514,7 +516,7 @@ namespace AppInstaller::Repository
 
             bool IsSame(const IPackage* other) const override
             {
-                const PinnablePackage* otherAvailable = dynamic_cast<const PinnablePackage*>(other);
+                const PinnablePackage* otherAvailable = PackageCast<const PinnablePackage*>(other);
 
                 if (otherAvailable)
                 {
@@ -527,6 +529,16 @@ namespace AppInstaller::Repository
                 return false;
             }
 
+            const void* CastTo(IPackageType type) const override
+            {
+                if (type == PackageType)
+                {
+                    return this;
+                }
+
+                return nullptr;
+            }
+
         private:
             std::string m_sourceId;
             std::shared_ptr<IPackage> m_package;
@@ -536,6 +548,8 @@ namespace AppInstaller::Repository
         // A composite package for the CompositeSource.
         struct CompositePackage : public IPackage
         {
+            static constexpr IPackageType PackageType = IPackageType::CompositePackage;
+
             CompositePackage(std::shared_ptr<IPackage> installedPackage, std::shared_ptr<IPackage> availablePackage = {})
             {
                 // Grab the installed version's channel to allow for filtering in calls to get available info.
@@ -684,7 +698,7 @@ namespace AppInstaller::Repository
 
             bool IsSame(const IPackage* other) const override
             {
-                const CompositePackage* otherComposite = dynamic_cast<const CompositePackage*>(other);
+                const CompositePackage* otherComposite = PackageCast<const CompositePackage*>(other);
 
                 if (!otherComposite ||
                     static_cast<bool>(m_installedPackage) != static_cast<bool>(otherComposite->m_installedPackage) ||
@@ -708,6 +722,16 @@ namespace AppInstaller::Repository
                 }
 
                 return true;
+            }
+
+            const void* CastTo(IPackageType type) const override
+            {
+                if (type == PackageType)
+                {
+                    return this;
+                }
+
+                return nullptr;
             }
 
             bool IsSameAsAnyAvailable(const IPackage* other) const
@@ -962,7 +986,7 @@ namespace AppInstaller::Repository
             {
                 for (auto& match : Matches)
                 {
-                    const CompositePackage* compositeMatch = dynamic_cast<const CompositePackage*>(match.Package.get());
+                    const CompositePackage* compositeMatch = PackageCast<const CompositePackage*>(match.Package.get());
                     if (compositeMatch && compositeMatch->IsSameAsAnyAvailable(availableMatch.Package.get()))
                     {
                         if (ResultMatchComparator{}(availableMatch, match))
@@ -1261,6 +1285,16 @@ namespace AppInstaller::Repository
         }
     }
 
+    void* CompositeSource::CastTo(ISourceType type)
+    {
+        if (type == SourceType)
+        {
+            return this;
+        }
+
+        return nullptr;
+    }
+
     void CompositeSource::AddAvailableSource(const Source& source)
     {
         m_availableSources.emplace_back(source);
@@ -1378,15 +1412,12 @@ namespace AppInstaller::Repository
                         }
                     }
 
-                    bool addedAvailablePackage = false;
-
                     // Directly search for the available package from tracking information.
                     if (trackingPackage)
                     {
                         auto availablePackage = GetTrackedPackageFromAvailableSource(result, trackedSource, trackingPackage->GetProperty(PackageProperty::Id));
                         if (availablePackage)
                         {
-                            addedAvailablePackage = true;
                             compositePackage->AddAvailablePackage(std::move(availablePackage));
                         }
                         compositePackage->SetTracking(std::move(trackedSource), std::move(trackingPackage), std::move(trackingPackageVersion));
@@ -1419,7 +1450,6 @@ namespace AppInstaller::Repository
                             });
 
                         // For non pinning cases. We found some matching packages here, don't keep going.
-                        addedAvailablePackage = true;
                         compositePackage->AddAvailablePackage(std::move(availablePackage));
                     }
                 }
@@ -1489,13 +1519,14 @@ namespace AppInstaller::Repository
             }
 
             SearchResult availableResult = result.SearchAndHandleFailures(source, request);
+            bool downloadManifests = source.QueryFeatureFlag(SourceFeatureFlag::ManifestMayContainAdditionalSystemReferenceStrings);
 
             for (auto&& match : availableResult.Matches)
             {
                 // Check for a package already in the result that should have been correlated already.
                 // In cases that PackageData will be created, also download manifests for system reference strings
                 // when search result is small (currently limiting to 1).
-                auto packageData = result.CheckForExistingResultFromAvailablePackageMatch(match, availableResult.Matches.size() == 1);
+                auto packageData = result.CheckForExistingResultFromAvailablePackageMatch(match, downloadManifests && availableResult.Matches.size() == 1);
 
                 // If found existing package in the result, continue
                 if (!packageData)

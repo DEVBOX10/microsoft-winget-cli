@@ -21,6 +21,11 @@
 #include "ImportCommand.h"
 #include "PinCommand.h"
 #include "ConfigureCommand.h"
+#include "DebugCommand.h"
+#include "TestCommand.h"
+#include "DownloadCommand.h"
+#include "ErrorCommand.h"
+#include "ResumeCommand.h"
 
 #include "Resources.h"
 #include "TableOutput.h"
@@ -138,6 +143,7 @@ namespace AppInstaller::CLI
             keyDirectories.OutputLine({ Resource::LocString{ Resource::String::PortableRootUser }, Runtime::GetPathTo(Runtime::PathName::PortablePackageUserRoot, true).u8string() });
             keyDirectories.OutputLine({ Resource::LocString{ Resource::String::PortableRoot }, Runtime::GetPathTo(Runtime::PathName::PortablePackageMachineRoot, true).u8string() });
             keyDirectories.OutputLine({ Resource::LocString{ Resource::String::PortableRoot86 }, Runtime::GetPathTo(Runtime::PathName::PortablePackageMachineRootX86, true).u8string() });
+            keyDirectories.OutputLine({ Resource::LocString{ Resource::String::InstallerDownloads }, Runtime::GetPathTo(Runtime::PathName::UserProfileDownloads, true).u8string() });
             keyDirectories.Complete();
             context.Reporter.Info() << std::endl;
         }
@@ -175,6 +181,15 @@ namespace AppInstaller::CLI
             std::make_unique<ImportCommand>(FullName()),
             std::make_unique<PinCommand>(FullName()),
             std::make_unique<ConfigureCommand>(FullName()),
+            std::make_unique<DownloadCommand>(FullName()),
+            std::make_unique<ErrorCommand>(FullName()),
+            std::make_unique<ResumeCommand>(FullName()),
+#if _DEBUG
+            std::make_unique<DebugCommand>(FullName()),
+#endif
+#ifndef AICLI_DISABLE_TEST_HOOKS
+            std::make_unique<TestCommand>(FullName()),
+#endif
         });
     }
 

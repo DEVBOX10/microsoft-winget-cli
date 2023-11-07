@@ -14,6 +14,8 @@ namespace Microsoft.WinGet.Configuration.Engine.Commands
     using Microsoft.PowerShell.Commands;
     using Microsoft.WinGet.Configuration.Engine.Exceptions;
     using Microsoft.WinGet.Configuration.Engine.Resources;
+    using Microsoft.WinGet.SharedLib.Exceptions;
+    using Microsoft.WinGet.SharedLib.PolicySettings;
 
     /// <summary>
     /// This is the base class for any command that performs async operations.
@@ -30,8 +32,6 @@ namespace Microsoft.WinGet.Configuration.Engine.Commands
         private readonly Thread originalThread;
 
         private readonly CancellationTokenSource source = new ();
-
-        private CancellationToken cancellationToken;
         private BlockingCollection<QueuedStream> queuedStreams = new ();
 
         private int progressActivityId = 0;
@@ -52,9 +52,25 @@ namespace Microsoft.WinGet.Configuration.Engine.Commands
                 throw new NotSupportedException(Resources.DebugNotSupported);
             }
 
+            GroupPolicy groupPolicy = GroupPolicy.GetInstance();
+
+            if (!groupPolicy.IsEnabled(Policy.WinGet))
+            {
+                throw new GroupPolicyException(Policy.WinGet, GroupPolicyFailureType.BlockedByPolicy);
+            }
+
+            if (!groupPolicy.IsEnabled(Policy.Configuration))
+            {
+                throw new GroupPolicyException(Policy.Configuration, GroupPolicyFailureType.BlockedByPolicy);
+            }
+
+            if (!groupPolicy.IsEnabled(Policy.WinGetCommandLineInterfaces))
+            {
+                throw new GroupPolicyException(Policy.WinGetCommandLineInterfaces, GroupPolicyFailureType.BlockedByPolicy);
+            }
+
             this.PsCmdlet = psCmdlet;
             this.originalThread = Thread.CurrentThread;
-            this.cancellationToken = this.source.Token;
         }
 
         /// <summary>
@@ -102,6 +118,14 @@ namespace Microsoft.WinGet.Configuration.Engine.Commands
         /// Gets the base cmdlet.
         /// </summary>
         protected PSCmdlet PsCmdlet { get; private set; }
+
+        /// <summary>
+        /// Request cancellation for this command.
+        /// </summary>
+        public void Cancel()
+        {
+            this.source.Cancel();
+        }
 
         /// <summary>
         /// Complete this operation.
@@ -357,6 +381,15 @@ namespace Microsoft.WinGet.Configuration.Engine.Commands
         internal int GetNewProgressActivityId()
         {
             return Interlocked.Increment(ref this.progressActivityId);
+        }
+
+        /// <summary>
+        /// Gets the cancellation token.
+        /// </summary>
+        /// <returns>CancellationToken.</returns>
+        protected CancellationToken GetCancellationToken()
+        {
+            return this.source.Token;
         }
 
         private void CmdletWrite(StreamType streamType, object data, AsyncCommand writeCommand)

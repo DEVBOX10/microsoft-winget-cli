@@ -69,10 +69,11 @@ namespace AppInstaller::Settings
         // Experimental
         EFExperimentalCmd,
         EFExperimentalArg,
-        EFDependencies,
         EFDirectMSI,
-        EFConfiguration,
         EFWindowsFeature,
+        EFResume,
+        EFConfiguration03,
+        EFReboot,
         // Telemetry
         TelemetryDisable,
         // Install behavior
@@ -82,6 +83,8 @@ namespace AppInstaller::Settings
         InstallArchitectureRequirement,
         InstallLocalePreference,
         InstallLocaleRequirement,
+        InstallerTypePreference,
+        InstallerTypeRequirement,
         InstallDefaultRoot,
         InstallSkipDependencies,
         DisableInstallNotes,
@@ -95,10 +98,15 @@ namespace AppInstaller::Settings
         LoggingLevelPreference,
         // Uninstall behavior
         UninstallPurgePortablePackage,
+        // Download behavior
+        DownloadDefaultDirectory,
         // Interactivity
         InteractivityDisable,
+#ifndef AICLI_DISABLE_TEST_HOOKS
         // Debug
         EnableSelfInitiatedMinidump,
+        KeepAllLogFiles,
+#endif
         Max
     };
 
@@ -140,10 +148,11 @@ namespace AppInstaller::Settings
         // Experimental
         SETTINGMAPPING_SPECIALIZATION(Setting::EFExperimentalCmd, bool, bool, false, ".experimentalFeatures.experimentalCmd"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::EFExperimentalArg, bool, bool, false, ".experimentalFeatures.experimentalArg"sv);
-        SETTINGMAPPING_SPECIALIZATION(Setting::EFDependencies, bool, bool, false, ".experimentalFeatures.dependencies"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::EFDirectMSI, bool, bool, false, ".experimentalFeatures.directMSI"sv);
-        SETTINGMAPPING_SPECIALIZATION(Setting::EFConfiguration, bool, bool, false, ".experimentalFeatures.configuration"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::EFWindowsFeature, bool, bool, false, ".experimentalFeatures.windowsFeature"sv);
+        SETTINGMAPPING_SPECIALIZATION(Setting::EFResume, bool, bool, false, ".experimentalFeatures.resume"sv);
+        SETTINGMAPPING_SPECIALIZATION(Setting::EFConfiguration03, bool, bool, false, ".experimentalFeatures.configuration03"sv);
+        SETTINGMAPPING_SPECIALIZATION(Setting::EFReboot, bool, bool, false, ".experimentalFeatures.reboot"sv);
         // Telemetry
         SETTINGMAPPING_SPECIALIZATION(Setting::TelemetryDisable, bool, bool, false, ".telemetry.disable"sv);
         // Install behavior
@@ -153,6 +162,8 @@ namespace AppInstaller::Settings
         SETTINGMAPPING_SPECIALIZATION(Setting::InstallScopeRequirement, std::string, Manifest::ScopeEnum, Manifest::ScopeEnum::Unknown, ".installBehavior.requirements.scope"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::InstallLocalePreference, std::vector<std::string>, std::vector<std::string>, {}, ".installBehavior.preferences.locale"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::InstallLocaleRequirement, std::vector<std::string>, std::vector<std::string>, {}, ".installBehavior.requirements.locale"sv);
+        SETTINGMAPPING_SPECIALIZATION(Setting::InstallerTypePreference, std::vector<std::string>, std::vector<Manifest::InstallerTypeEnum>, {}, ".installBehavior.preferences.installerTypes"sv);
+        SETTINGMAPPING_SPECIALIZATION(Setting::InstallerTypeRequirement, std::vector<std::string>, std::vector<Manifest::InstallerTypeEnum>, {}, ".installBehavior.requirements.installerTypes"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::InstallSkipDependencies, bool, bool, false, ".installBehavior.skipDependencies"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::DisableInstallNotes, bool, bool, false, ".installBehavior.disableInstallNotes"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::PortablePackageUserRoot, std::string, std::filesystem::path, {}, ".installBehavior.portablePackageUserRoot"sv);
@@ -160,12 +171,18 @@ namespace AppInstaller::Settings
         SETTINGMAPPING_SPECIALIZATION(Setting::InstallDefaultRoot, std::string, std::filesystem::path, {}, ".installBehavior.defaultInstallRoot"sv);
         // Uninstall behavior
         SETTINGMAPPING_SPECIALIZATION(Setting::UninstallPurgePortablePackage, bool, bool, false, ".uninstallBehavior.purgePortablePackage"sv);
+        // Download behavior
+        SETTINGMAPPING_SPECIALIZATION(Setting::DownloadDefaultDirectory, std::string, std::filesystem::path, {}, ".downloadBehavior.defaultDownloadDirectory"sv);
+
         // Network
         SETTINGMAPPING_SPECIALIZATION(Setting::NetworkDownloader, std::string, InstallerDownloader, InstallerDownloader::Default, ".network.downloader"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::NetworkDOProgressTimeoutInSeconds, uint32_t, std::chrono::seconds, 60s, ".network.doProgressTimeoutInSeconds"sv);
         SETTINGMAPPING_SPECIALIZATION(Setting::NetworkWingetAlternateSourceURL, bool, bool, true, ".network.enableWingetAlternateSourceURL"sv);
+#ifndef AICLI_DISABLE_TEST_HOOKS
         // Debug
         SETTINGMAPPING_SPECIALIZATION(Setting::EnableSelfInitiatedMinidump, bool, bool, false, ".debugging.enableSelfInitiatedMinidump"sv);
+        SETTINGMAPPING_SPECIALIZATION(Setting::KeepAllLogFiles, bool, bool, false, ".debugging.keepAllLogFiles"sv);
+#endif
         // Logging
         SETTINGMAPPING_SPECIALIZATION(Setting::LoggingLevelPreference, std::string, Logging::Level, Logging::Level::Info, ".logging.level"sv);
         // Interactivity

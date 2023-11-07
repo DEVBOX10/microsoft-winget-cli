@@ -93,6 +93,28 @@
             "minItems": 1,
             "maxItems": 4
           }
+        },
+        "installerTypes": {
+          "description": "The installerType(s) to use for a package install",
+          "type": "array",
+          "items": {
+            "uniqueItems": "true",
+            "type": "string",
+            "enum": [
+              "inno",
+              "wix",
+              "msi",
+              "nullsoft",
+              "zip",
+              "msix",
+              "exe",
+              "burn",
+              "msstore",
+              "portable"
+            ],
+            "minItems": 1,
+            "maxItems": 9
+          }
         }
       }
     },
@@ -136,7 +158,18 @@
         "purgePortablePackage": {
           "description": "Controls whether the default behavior for uninstall removes all files and directories relevant to this package. Only applies to the portable installerType.",
           "type": "boolean",
-          "default":  false
+          "default": false
+        }
+      }
+    },
+    "DownloadBehavior": {
+      "description": "Download settings",
+      "type": "object",
+      "properties": {
+        "defaultDownloadDirectory": {
+          "description": "The default directory where installers are downloaded to.",
+          "type": "string",
+          "default": "%USERPROFILE%/Downloads/"
         }
       }
     },
@@ -199,11 +232,6 @@
           "type": "boolean",
           "default": false
         },
-        "dependencies": {
-          "description": "Support for package dependencies",
-          "type": "boolean",
-          "default": false
-        },
         "directMSI": {
           "description": "Enable use of MSI APIs rather than msiexec for MSI installs",
           "type": "boolean",
@@ -211,6 +239,16 @@
         },
         "configuration": {
           "description": "Enable support for configuration",
+          "type": "boolean",
+          "default": false
+        },
+        "windowsFeature": {
+          "description": "Enable support for enabling Windows Feature(s)",
+          "type": "boolean",
+          "default": false
+        },
+        "reboot": {
+          "description": "Enable support for initiating a reboot",
           "type": "boolean",
           "default": false
         }

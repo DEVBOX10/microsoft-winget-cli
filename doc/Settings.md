@@ -140,6 +140,18 @@ The `architectures` behavior affects what architectures will be selected when in
     },
 ```
 
+### Installer Types
+
+The `installerTypes` behavior affects what installer types will be selected when installing a package. The matching parameter is `--installer-type`.
+
+```json
+    "installBehavior": {
+        "preferences": {
+            "installerTypes": ["msi", "msix"]
+        }
+    },
+```
+
 ### Default install root
 
 The `defaultInstallRoot` affects the install location when a package requires one. This can be overridden by the `--location` parameter. This setting is only used when a package manifest includes `InstallLocationRequired`, and the actual location is obtained by appending the package ID to the root.
@@ -251,16 +263,6 @@ You can enable the feature as shown below.
    },
 ```
 
-### dependencies
-
-Experimental feature with the aim of managing dependencies, as of now it only shows package dependency information. You can enable the feature as shown below.
-
-```json
-   "experimentalFeatures": {
-       "dependencies": true
-   },
-```
-
 ### configuration
 
 This feature enables the configuration commands. These commands allow configuring the system into a desired state.
@@ -280,5 +282,38 @@ You can enable the feature as shown below.
 ```json
    "experimentalFeatures": {
        "windowsFeature": true
+   },
+```
+
+### resume
+
+This feature enables support for some commands to resume.
+You can enable the feature as shown below.
+
+```json
+   "experimentalFeatures": {
+       "resume": true
+   },
+```
+
+### reboot
+
+This feature enables support for initiating a reboot.
+You can enable the feature as shown below.
+
+```json
+   "experimentalFeatures": {
+       "reboot": true
+   },
+```
+
+### configuration03
+
+This feature enables the configuration schema 0.3.
+You can enable the feature as shown below.
+
+```json
+   "experimentalFeatures": {
+       "configuration03": true
    },
 ```

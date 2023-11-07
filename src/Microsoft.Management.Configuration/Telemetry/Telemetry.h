@@ -49,6 +49,7 @@ namespace winrt::Microsoft::Management::Configuration::implementation
         static constexpr std::string_view GetAction = "get";
         static constexpr std::string_view ApplyAction = "apply";
         static constexpr std::string_view TestAction = "test";
+        static constexpr std::string_view ExportAction = "export";
 
         // Logs information about running a configuration unit.
         // The caller is expected to only call this for failures from publicly available units.
@@ -70,7 +71,7 @@ namespace winrt::Microsoft::Management::Configuration::implementation
             const Configuration::ConfigurationUnit& unit,
             ConfigurationUnitIntent runIntent,
             std::string_view action,
-            const Configuration::ConfigurationUnitResultInformation& resultInformation) const noexcept;
+            const IConfigurationUnitResultInformation& resultInformation) const noexcept;
 
         // The summary information for a specific unit intent.
         struct ProcessingSummaryForIntent

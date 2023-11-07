@@ -21,7 +21,6 @@ namespace winrt::Microsoft::Management::Configuration::implementation
         using ApplyConfigurationSetResult = Configuration::ApplyConfigurationSetResult;
         using ConfigurationSet = Configuration::ConfigurationSet;
         using ConfigurationUnit = Configuration::ConfigurationUnit;
-        using ConfigurationUnitResultInformation = Configuration::ConfigurationUnitResultInformation;
         using ConfigurationSetChangeData = Configuration::ConfigurationSetChangeData;
 
         using result_type = decltype(make_self<wil::details::module_count_wrapper<implementation::ApplyConfigurationSetResult>>());
@@ -29,7 +28,7 @@ namespace winrt::Microsoft::Management::Configuration::implementation
         ConfigurationSetApplyProcessor(const ConfigurationSet& configurationSet, const TelemetryTraceLogger& telemetry, IConfigurationSetProcessor&& setProcessor, AppInstaller::WinRT::AsyncProgress<ApplyConfigurationSetResult, ConfigurationSetChangeData>&& progress);
 
         // Processes the apply for the configuration set.
-        void Process();
+        void Process(bool preProcessOnly = false);
 
         // Gets the result object.
         ApplyConfigurationSetResult Result() const;

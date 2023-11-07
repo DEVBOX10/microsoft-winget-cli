@@ -4,13 +4,11 @@
 #include <winget/MSStore.h>
 #include <winget/ManifestCommon.h>
 #include <winget/Runtime.h>
-#include <winget/SelfManagement.h>
 #include <AppInstallerFileLogger.h>
 #include <AppInstallerErrors.h>
 
 namespace AppInstaller::MSStore
 {
-    using namespace AppInstaller::SelfManagement;
     using namespace std::string_view_literals;
     using namespace winrt::Windows::Foundation;
     using namespace winrt::Windows::Foundation::Collections;
@@ -220,11 +218,26 @@ namespace AppInstaller::MSStore
                 progress.OnProgress(currentProgress, overallProgressMax, ProgressType::Percent);
             }
 
-            if (progress.IsCancelled())
+            if (progress.IsCancelledBy(CancelReason::User))
             {
                 for (auto const& installItem : installItems)
                 {
                     installItem.Cancel();
+                }
+            }
+
+            // If app shutdown then we have 30s to keep installing, keep going and hope for the best.
+            else if (progress.IsCancelledBy(CancelReason::AppShutdown))
+            {
+                for (auto const& installItem : installItems)
+                {
+                    // Insert spiderman meme.
+                    if (installItem.ProductId() == std::wstring{ s_AppInstallerProductId })
+                    {
+                        AICLI_LOG(Core, Info, << "Asked to shutdown while installing AppInstaller.");
+                        progress.OnProgress(overallProgressMax, overallProgressMax, ProgressType::Percent);
+                        return S_OK;
+                    }
                 }
             }
 

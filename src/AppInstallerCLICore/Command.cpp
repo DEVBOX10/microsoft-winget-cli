@@ -720,6 +720,15 @@ namespace AppInstaller::CLI
             }
         }
 
+        if (execArgs.Contains(Execution::Args::Type::InstallerType))
+        {
+            Manifest::InstallerTypeEnum selectedInstallerType = Manifest::ConvertToInstallerTypeEnum(std::string(execArgs.GetArg(Execution::Args::Type::InstallerType)));
+            if (selectedInstallerType == Manifest::InstallerTypeEnum::Unknown)
+            {
+                throw CommandException(Resource::String::InvalidArgumentValueErrorWithoutValidValues(Argument::ForType(Execution::Args::Type::InstallerType).Name()));
+            }
+        }
+
         Argument::ValidateExclusiveArguments(execArgs);
 
         ValidateArgumentsInternal(execArgs);
@@ -831,7 +840,7 @@ namespace AppInstaller::CLI
 
     void Command::Complete(Execution::Context&, Execution::Args::Type) const
     {
-        // Derived commands must suppy context sensitive argument values.
+        // Derived commands must supply context sensitive argument values.
     }
 
     void Command::Execute(Execution::Context& context) const
@@ -842,6 +851,13 @@ namespace AppInstaller::CLI
         {
             AICLI_LOG(CLI, Error, << "WinGet is disabled by group policy");
             throw GroupPolicyException(Settings::TogglePolicy::Policy::WinGet);
+        }
+
+        // Block CLI execution if WinGetCommandLineInterfaces is disabled by Policy
+        if (!Settings::GroupPolicies().IsEnabled(Settings::TogglePolicy::Policy::WinGetCommandLineInterfaces))
+        {
+            AICLI_LOG(CLI, Error, << "WinGet is disabled by group policy");
+            throw GroupPolicyException(Settings::TogglePolicy::Policy::WinGetCommandLineInterfaces);
         }
 
         AICLI_LOG(CLI, Info, << "Executing command: " << Name());
@@ -867,6 +883,12 @@ namespace AppInstaller::CLI
         }
     }
 
+    void Command::Resume(Execution::Context& context) const
+    {
+        context.Reporter.Error() << Resource::String::CommandDoesNotSupportResumeMessage << std::endl;
+        AICLI_TERMINATE_CONTEXT(E_NOTIMPL);
+    }
+    
     void Command::SelectCurrentCommandIfUnrecognizedSubcommandFound(bool value)
     {
         m_selectCurrentCommandIfUnrecognizedSubcommandFound = value;

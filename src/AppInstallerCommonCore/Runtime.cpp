@@ -31,6 +31,7 @@ namespace AppInstaller::Runtime
         constexpr std::string_view s_PortablePackageRoot = "WinGet"sv;
         constexpr std::string_view s_PortablePackagesDirectory = "Packages"sv;
         constexpr std::string_view s_LinksDirectory = "Links"sv;
+        constexpr std::string_view s_CheckpointsDirectory = "Checkpoints"sv;
         constexpr std::string_view s_DevModeSubkey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock"sv;
         constexpr std::string_view s_AllowDevelopmentWithoutDevLicense = "AllowDevelopmentWithoutDevLicense"sv;
 #ifndef WINGET_DISABLE_FOR_FUZZING
@@ -254,6 +255,7 @@ namespace AppInstaller::Runtime
         // Configuring permissions for both CurrentUser and SYSTEM while not having owner set as one of them is not valid because
         // below we use only the owner permissions in the case of running as SYSTEM.
         if ((hasCurrentUser && hasSystem) &&
+            IsRunningAsSystem() &&
             (!Owner || (Owner.value() != ACEPrincipal::CurrentUser && Owner.value() != ACEPrincipal::System)))
         {
             THROW_HR(HRESULT_FROM_WIN32(ERROR_INVALID_STATE));
@@ -382,6 +384,10 @@ namespace AppInstaller::Runtime
             result.Path /= s_PortablePackageRoot;
             result.Path /= s_LinksDirectory;
             break;
+        case PathName::UserProfileDownloads:
+            result.Path = GetKnownFolderPath(FOLDERID_Downloads);
+            mayBeInProfilePath = true;
+            break;
         default:
             THROW_HR(E_UNEXPECTED);
         }
@@ -437,7 +443,12 @@ namespace AppInstaller::Runtime
             if (path == PathName::SecureSettingsForWrite)
             {
                 result.SetOwner(ACEPrincipal::Admins);
-                result.ACL[ACEPrincipal::CurrentUser] = ACEPermissions::ReadExecute;
+                // When running as system, we do not set current user permissions to avoid permission conflicts.
+                if (!IsRunningAsSystem())
+                {
+                    result.ACL[ACEPrincipal::CurrentUser] = ACEPermissions::ReadExecute;
+                }
+                result.ACL[ACEPrincipal::System] = ACEPermissions::All;
             }
             else
             {
@@ -448,15 +459,18 @@ namespace AppInstaller::Runtime
         case PathName::PortablePackageMachineRoot:
         case PathName::PortablePackageMachineRootX86:
         case PathName::PortableLinksMachineLocation:
-            result = GetPathDetailsCommon(path, forDisplay);
-            break;
         case PathName::PortableLinksUserLocation:
         case PathName::PortablePackageUserRoot:
+        case PathName::UserProfileDownloads:
             result = GetPathDetailsCommon(path, forDisplay);
             break;
         case PathName::SelfPackageRoot:
             result.Path = GetPackagePath();
             result.Create = false;
+            break;
+        case PathName::CheckpointsLocation:
+            result = GetPathDetailsForPackagedContext(PathName::LocalState, forDisplay);
+            result.Path /= s_CheckpointsDirectory;
             break;
         default:
             THROW_HR(E_UNEXPECTED);
@@ -497,12 +511,16 @@ namespace AppInstaller::Runtime
             result.Path = GetPathToAppDataDir(s_AppDataDir_State, forDisplay);
             result.Path /= GetRuntimePathStateName();
             result.SetOwner(ACEPrincipal::CurrentUser);
+            result.ACL[ACEPrincipal::System] = ACEPermissions::All;
+            result.ACL[ACEPrincipal::Admins] = ACEPermissions::All;
             break;
         case PathName::StandardSettings:
         case PathName::UserFileSettings:
             result.Path = GetPathToAppDataDir(s_AppDataDir_Settings, forDisplay);
             result.Path /= GetRuntimePathStateName();
             result.SetOwner(ACEPrincipal::CurrentUser);
+            result.ACL[ACEPrincipal::System] = ACEPermissions::All;
+            result.ACL[ACEPrincipal::Admins] = ACEPermissions::All;
             break;
         case PathName::SecureSettingsForRead:
         case PathName::SecureSettingsForWrite:
@@ -515,7 +533,12 @@ namespace AppInstaller::Runtime
             if (path == PathName::SecureSettingsForWrite)
             {
                 result.SetOwner(ACEPrincipal::Admins);
-                result.ACL[ACEPrincipal::CurrentUser] = ACEPermissions::ReadExecute;
+                // When running as system, we do not set current user permissions to avoid permission conflicts.
+                if (!IsRunningAsSystem())
+                {
+                    result.ACL[ACEPrincipal::CurrentUser] = ACEPermissions::ReadExecute;
+                }
+                result.ACL[ACEPrincipal::System] = ACEPermissions::All;
             }
             else
             {
@@ -526,15 +549,18 @@ namespace AppInstaller::Runtime
         case PathName::PortablePackageMachineRoot:
         case PathName::PortablePackageMachineRootX86:
         case PathName::PortableLinksMachineLocation:
-            result = GetPathDetailsCommon(path, forDisplay);
-            break;
         case PathName::PortableLinksUserLocation:
         case PathName::PortablePackageUserRoot:
+        case PathName::UserProfileDownloads:
             result = GetPathDetailsCommon(path, forDisplay);
             break;
         case PathName::SelfPackageRoot:
             result.Path = GetBinaryDirectoryPath();
             result.Create = false;
+            break;
+        case PathName::CheckpointsLocation:
+            result = GetPathDetailsForUnpackagedContext(PathName::LocalState, forDisplay);
+            result.Path /= s_CheckpointsDirectory;
             break;
         default:
             THROW_HR(E_UNEXPECTED);

@@ -12,8 +12,8 @@ namespace TestCommon
     TestPackageVersion::TestPackageVersion(const Manifest& manifest, MetadataMap installationMetadata, std::weak_ptr<const ISource> source) :
         VersionManifest(manifest), Metadata(std::move(installationMetadata)), Source(source) {}
 
-    TestPackageVersion::TestPackageVersion(const Manifest& manifest, std::weak_ptr<const ISource> source) :
-        VersionManifest(manifest), Source(source) {}
+    TestPackageVersion::TestPackageVersion(const Manifest& manifest, std::weak_ptr<const ISource> source, bool hideSystemReferenceStrings) :
+        VersionManifest(manifest), Source(source), HideSystemReferenceStrings(hideSystemReferenceStrings) {}
 
     TestPackageVersion::LocIndString TestPackageVersion::GetProperty(PackageVersionProperty property) const
     {
@@ -47,16 +47,22 @@ namespace TestCommon
         switch (property)
         {
         case PackageVersionMultiProperty::PackageFamilyName:
-            for (const auto& installer : VersionManifest.Installers)
+            if (!HideSystemReferenceStrings)
             {
-                AddIfHasValueAndNotPresent(installer.PackageFamilyName, result, true);
+                for (const auto& installer : VersionManifest.Installers)
+                {
+                    AddIfHasValueAndNotPresent(installer.PackageFamilyName, result, true);
+                }
             }
             break;
         case PackageVersionMultiProperty::ProductCode:
-            for (const auto& installer : VersionManifest.Installers)
+            if (!HideSystemReferenceStrings)
             {
-                bool shouldFoldCaseForNonPortable = installer.EffectiveInstallerType() != AppInstaller::Manifest::InstallerTypeEnum::Portable;
-                AddIfHasValueAndNotPresent(installer.ProductCode, result, shouldFoldCaseForNonPortable);
+                for (const auto& installer : VersionManifest.Installers)
+                {
+                    bool shouldFoldCaseForNonPortable = installer.EffectiveInstallerType() != AppInstaller::Manifest::InstallerTypeEnum::Portable;
+                    AddIfHasValueAndNotPresent(installer.ProductCode, result, shouldFoldCaseForNonPortable);
+                }
             }
             break;
         case PackageVersionMultiProperty::Name:
@@ -111,11 +117,11 @@ namespace TestCommon
         }
     }
 
-    TestPackage::TestPackage(const std::vector<Manifest>& available, std::weak_ptr<const ISource> source)
+    TestPackage::TestPackage(const std::vector<Manifest>& available, std::weak_ptr<const ISource> source, bool hideSystemReferenceStringsOnVersion)
     {
         for (const auto& manifest : available)
         {
-            AvailableVersions.emplace_back(TestPackageVersion::Make(manifest, source));
+            AvailableVersions.emplace_back(TestPackageVersion::Make(manifest, source, hideSystemReferenceStringsOnVersion));
         }
     }
 
@@ -216,7 +222,7 @@ namespace TestCommon
             return IsSameOverride(this, other);
         }
 
-        const TestPackage* otherAvailable = dynamic_cast<const TestPackage*>(other);
+        const TestPackage* otherAvailable = PackageCast<const TestPackage*>(other);
 
         if (!otherAvailable ||
             InstalledVersion.get() != otherAvailable->InstalledVersion.get() ||
@@ -236,6 +242,16 @@ namespace TestCommon
         return true;
     }
 
+    const void* TestPackage::CastTo(IPackageType type) const
+    {
+        if (type == PackageType)
+        {
+            return this;
+        }
+
+        return nullptr;
+    }
+
     const SourceDetails& TestSource::GetDetails() const
     {
         return Details;
@@ -251,6 +267,11 @@ namespace TestCommon
         return Information;
     }
 
+    bool TestSource::QueryFeatureFlag(SourceFeatureFlag flag) const
+    {
+        return (QueryFeatureFlagFunction ? QueryFeatureFlagFunction(flag) : false);
+    }
+
     SearchResult TestSource::Search(const SearchRequest& request) const
     {
         if (SearchFunction)
@@ -263,6 +284,16 @@ namespace TestCommon
         }
     }
 
+    void* TestSource::CastTo(AppInstaller::Repository::ISourceType type)
+    {
+        if (type == SourceType)
+        {
+            return this;
+        }
+
+        return nullptr;
+    }
+
     std::string_view TestSourceFactory::TypeName() const
     {
         return "*TestSource"sv;
@@ -270,14 +301,20 @@ namespace TestCommon
 
     std::shared_ptr<ISourceReference> TestSourceFactory::Create(const SourceDetails& details)
     {
+        std::shared_ptr<TestSourceReference> result;
+
         if (OnOpenWithCustomHeader)
         {
-            return std::make_shared<TestSourceReference>(details, OnOpenWithCustomHeader);
+            result = std::make_shared<TestSourceReference>(details, OnOpenWithCustomHeader);
         }
         else
         {
-            return std::make_shared<TestSourceReference>(details, OnOpen);
+            result = std::make_shared<TestSourceReference>(details, OnOpen);
         }
+
+        result->ShouldUpdateBeforeOpenResult = ShouldUpdateBeforeOpenResult;
+
+        return result;
     }
 
     bool TestSourceFactory::Add(SourceDetails& details, IProgressCallback&)

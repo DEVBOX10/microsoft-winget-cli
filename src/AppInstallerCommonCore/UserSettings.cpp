@@ -258,18 +258,23 @@ namespace AppInstaller::Settings
 
         WINGET_VALIDATE_PASS_THROUGH(EFExperimentalCmd)
         WINGET_VALIDATE_PASS_THROUGH(EFExperimentalArg)
-        WINGET_VALIDATE_PASS_THROUGH(EFDependencies)
         WINGET_VALIDATE_PASS_THROUGH(EFDirectMSI)
-        WINGET_VALIDATE_PASS_THROUGH(EFConfiguration)
         WINGET_VALIDATE_PASS_THROUGH(EFWindowsFeature)
+        WINGET_VALIDATE_PASS_THROUGH(EFResume)
+        WINGET_VALIDATE_PASS_THROUGH(EFConfiguration03)
+        WINGET_VALIDATE_PASS_THROUGH(EFReboot)
         WINGET_VALIDATE_PASS_THROUGH(AnonymizePathForDisplay)
         WINGET_VALIDATE_PASS_THROUGH(TelemetryDisable)
         WINGET_VALIDATE_PASS_THROUGH(InteractivityDisable)
-        WINGET_VALIDATE_PASS_THROUGH(EnableSelfInitiatedMinidump)
         WINGET_VALIDATE_PASS_THROUGH(InstallSkipDependencies)
         WINGET_VALIDATE_PASS_THROUGH(DisableInstallNotes)
         WINGET_VALIDATE_PASS_THROUGH(UninstallPurgePortablePackage)
         WINGET_VALIDATE_PASS_THROUGH(NetworkWingetAlternateSourceURL)
+
+#ifndef AICLI_DISABLE_TEST_HOOKS
+        WINGET_VALIDATE_PASS_THROUGH(EnableSelfInitiatedMinidump)
+        WINGET_VALIDATE_PASS_THROUGH(KeepAllLogFiles)
+#endif
 
         WINGET_VALIDATE_SIGNATURE(PortablePackageUserRoot)
         {
@@ -284,7 +289,8 @@ namespace AppInstaller::Settings
         WINGET_VALIDATE_SIGNATURE(InstallArchitecturePreference)
         {
             std::vector<Utility::Architecture> archs;
-            for (auto const& i : value) {
+            for (auto const& i : value)
+            {
                 Utility::Architecture arch = Utility::ConvertToArchitectureEnum(i);
                 if (Utility::IsApplicableArchitecture(arch) == Utility::InapplicableArchitecture)
                 {
@@ -340,7 +346,32 @@ namespace AppInstaller::Settings
             return SettingMapping<Setting::InstallLocalePreference>::Validate(value);
         }
 
+        WINGET_VALIDATE_SIGNATURE(InstallerTypePreference)
+        {
+            std::vector<Manifest::InstallerTypeEnum> installerTypes;
+            for (auto const& i : value)
+            {
+                Manifest::InstallerTypeEnum installerType = Manifest::ConvertToInstallerTypeEnum(i);
+                if (installerType == Manifest::InstallerTypeEnum::Unknown)
+                {
+                    return {};
+                }
+                installerTypes.emplace_back(installerType);
+            }
+            return installerTypes;
+        }
+
+        WINGET_VALIDATE_SIGNATURE(InstallerTypeRequirement)
+        {
+            return SettingMapping<Setting::InstallerTypePreference>::Validate(value);
+        }
+
         WINGET_VALIDATE_SIGNATURE(InstallDefaultRoot)
+        {
+            return ValidatePathValue(value);
+        }
+
+        WINGET_VALIDATE_SIGNATURE(DownloadDefaultDirectory)
         {
             return ValidatePathValue(value);
         }
